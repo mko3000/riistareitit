@@ -27,24 +27,32 @@ The point of combining them: a hunter can see not just *where birds were found*,
 Each feature below is tagged with its Linear issue ID(s). Treat this doc, not the
 tickets, as the behavioural source of truth — tickets link back here once implemented.
 
-## 3. Architecture (proposed — not yet confirmed, flag any change here first)
+## 3. Architecture
 
-- **Frontend:** React + TypeScript, SPA (Vite). No SSR framework assumed; revisit if
-  SEO or server rendering becomes a requirement.
+- **Frontend:** React 19 + TypeScript, SPA, built with Vite 8. Confirmed and
+  implemented (`RII-26`) — plain root-level project (`package.json`, `src/`, `index.html`
+  at repo root), no framework-level routing yet since there's only one page. No SSR;
+  revisit if SEO or server rendering becomes a requirement.
 - **Backend:** Node.js + TypeScript, REST API (Express or Fastify — pick one on first
-  implementation and record the choice here).
+  implementation and record the choice here). Not yet started.
 - **Database:** Postgres. Recommend an ORM/query builder with migration support
   (e.g. Prisma or Drizzle) over hand-rolled SQL, given the schema will evolve
-  MVP → Post-MVP; record the actual choice here once made.
-- **Map rendering:** Leaflet (open-source, works with arbitrary tile providers) is the
-  default assumption over a paid SDK. Tile provider for topographic/satellite layers is
-  **undecided** — this is a billed-API hard boundary per `CLAUDE.md`, needs explicit
-  sign-off before implementation (candidates: MML avoin data for Finnish topo maps,
-  a paid provider for satellite).
+  MVP → Post-MVP; record the actual choice here once made. Not yet started.
+- **Map rendering:** Leaflet 1.9 via `react-leaflet` 5. Confirmed and implemented
+  (`RII-26`). Tile provider for the base layer is currently OpenStreetMap's standard
+  tiles (`{s}.tile.openstreetmap.org`) — free, no API key, no cost implications; this
+  is a placeholder, not the final look. Topographic/satellite tile providers are
+  **still undecided** — this is a billed-API hard boundary per `CLAUDE.md`, needs
+  explicit sign-off before `RII-6` implements the layer toggle (candidates: MML avoin
+  data for Finnish topo maps, a paid provider for satellite).
+- **Styling:** deliberately minimal — a handful of plain CSS rules to make the map
+  container fill the viewport (`src/index.css`), no design system or component
+  library. Revisit once the app has more than one screen/feature worth styling.
 - **Hosting/deployment:** not yet decided.
 
-These are implementation defaults, not requirements — the first PR that touches them
-should update this section to match what was actually built.
+These are now the actual choices in the repo, not just proposals — update this section
+again if a later ticket changes any of them (e.g. adding routing, picking the backend
+framework).
 
 ## 4. Data model (Postgres)
 
@@ -213,7 +221,8 @@ each one; don't let it stay a stub once work begins.
 - Backend web framework (Express vs. Fastify vs. other) — pick on first implementation.
 - ORM/migration tool — pick on first implementation.
 - Map tile provider for topo + satellite layers, and its cost implications (hard
-  boundary per `CLAUDE.md` — needs explicit sign-off).
+  boundary per `CLAUDE.md` — needs explicit sign-off). The current OSM standard-tile
+  base layer (`RII-26`) is a free placeholder, not a resolution of this question.
 - Hosting/deployment target.
 - Admin role's actual capabilities (`RII-9`).
 - Hunting party invite flow: open-add vs. accept-required (`RII-10`).
