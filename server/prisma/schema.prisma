@@ -30,5 +30,29 @@ model User {
   role         String   @default("member")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
+  sessions Session[]
+
   @@map("users")
+}
+
+// RII-29. Not itself a RII-29 acceptance criterion, but RII-29 needs it: "on
+// success, the user is signed in immediately" requires a session mechanism,
+// which was otherwise scoped to RII-30. Built the shared piece here (create +
+// cookie helpers); RII-30 adds the login/logout/me *endpoints* on top of the
+// same module (server/src/session.ts) rather than re-inventing it — see that
+// ticket for the updated split.
+//
+// Server-side session, not a stateless signed cookie: the cookie only holds
+// this row's id, so logout (RII-30) can delete the row for real revocation,
+// per that ticket's "invalidates server-side, not just client state"
+// requirement.
+model Session {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("sessions")
 }
