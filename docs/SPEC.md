@@ -33,11 +33,17 @@ tickets, as the behavioural source of truth — tickets link back here once impl
   implemented (`RII-26`) — plain root-level project (`package.json`, `src/`, `index.html`
   at repo root), no framework-level routing yet since there's only one page. No SSR;
   revisit if SEO or server rendering becomes a requirement.
-- **Backend:** Node.js + TypeScript, REST API (Express or Fastify — pick one on first
-  implementation and record the choice here). Not yet started.
-- **Database:** Postgres. Recommend an ORM/query builder with migration support
-  (e.g. Prisma or Drizzle) over hand-rolled SQL, given the schema will evolve
-  MVP → Post-MVP; record the actual choice here once made. Not yet started.
+- **Backend:** Node.js + TypeScript, REST API on **Fastify** 5. Confirmed and
+  implemented (`RII-27`) as a separate project at `server/` (its own `package.json`,
+  independent of the frontend at repo root — not an npm workspace, just two sibling
+  projects). Ships with a single `/health` endpoint for now; real routes arrive with
+  each feature (`RII-28`+ for accounts).
+- **Database:** Postgres, via **Prisma** 6 (pinned to the 6.x line — Prisma 7's tooling
+  currently needs Node 22+, and dev machines here are on Node 20). Confirmed and
+  implemented (`RII-27`). Local development runs Postgres via `docker-compose.yml` at
+  the repo root (`docker compose up -d`); see `server/README.md` for the full setup.
+  `server/prisma/schema.prisma` intentionally has zero models as of `RII-27` — it's
+  infra only. The first real table (`users`) lands in `RII-28`.
 - **Map rendering:** Leaflet 1.9 via `react-leaflet` 5. Confirmed and implemented
   (`RII-26`). Tile provider for the base layer is currently OpenStreetMap's standard
   tiles (`{s}.tile.openstreetmap.org`) — free, no API key, no cost implications; this
@@ -218,8 +224,9 @@ each one; don't let it stay a stub once work begins.
 
 ## 9. Open questions / assumptions to confirm
 
-- Backend web framework (Express vs. Fastify vs. other) — pick on first implementation.
-- ORM/migration tool — pick on first implementation.
+- ~~Backend web framework~~ — resolved: Fastify (`RII-27`).
+- ~~ORM/migration tool~~ — resolved: Prisma, pinned to 6.x for Node 20 compatibility
+  (`RII-27`).
 - Map tile provider for topo + satellite layers, and its cost implications (hard
   boundary per `CLAUDE.md` — needs explicit sign-off). The current OSM standard-tile
   base layer (`RII-26`) is a free placeholder, not a resolution of this question.

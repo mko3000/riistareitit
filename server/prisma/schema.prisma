@@ -1,0 +1,15 @@
+// Prisma schema for the riistareitit backend.
+// See docs/SPEC.md §4 for the full data model this will grow into.
+//
+// RII-27 deliberately ships with zero models — this ticket is just the
+// plumbing (DB connection + migration tooling). The first real table
+// (`users`) is added in RII-28.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
