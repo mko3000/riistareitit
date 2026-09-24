@@ -9,3 +9,34 @@ body,
   height: 100%;
   width: 100%;
 }
+
+/* RII-29: deliberately minimal, no design system. */
+.auth-panel {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 1000; /* above Leaflet's own panes */
+  background: white;
+  padding: 0.75rem;
+  border: 1px solid #ccc;
+  font-family: sans-serif;
+  font-size: 0.9rem;
+}
+
+.signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 14rem;
+}
+
+.field-error {
+  color: #b00020;
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+}
+
+.form-error {
+  color: #b00020;
+  margin: 0.25rem 0;
+}

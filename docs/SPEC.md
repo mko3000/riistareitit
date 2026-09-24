@@ -80,6 +80,20 @@ CREATE TABLE users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Implemented in RII-29. Not in the original schema draft — RII-29 needed a
+-- session mechanism to fulfil "signed in immediately" after sign-up, ahead
+-- of RII-30 (which was going to own it). Server-side session, not a
+-- stateless signed cookie: the cookie holds only this row's id, so RII-30's
+-- logout can delete the row for real revocation. See
+-- server/src/session.ts for the create/cookie/read helpers.
+CREATE TABLE sessions (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX ON sessions (user_id);
+
 -- (Post-MVP: RII-10) — hunting parties
 CREATE TABLE hunting_parties (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -219,11 +233,33 @@ type ImportedTrack = {
   preset species. User-entered custom species are **not** translated (no reliable way
   to translate free text) — the toggle only affects UI chrome and preset species names.
 
-## 8. Auth, parties, areas, filtering, fog of war (Post-MVP)
+## 8. Accounts (RII-8, moved into MVP) and remaining Post-MVP features
 
-Deferred — see Linear issues `RII-8` through `RII-14` for current requirements and
-open questions. Expand this section with concrete API/schema detail before starting
-each one; don't let it stay a stub once work begins.
+### Accounts API
+
+Login stays **optional** app-wide (see `RII-8`) — nothing below requires an account;
+it only attributes data to a real name instead of "unknown" once you have one.
+
+- `POST /signup` — `{ email, displayName, password }` → `201` with the created user
+  (never includes `passwordHash`) and sets the session cookie (signed in immediately,
+  no email verification step). `400` with `fieldErrors` per invalid field; `409`
+  `email_taken` on a duplicate. Email is trimmed + lowercased before every
+  write/lookup — see `RII-28`'s note on case-insensitive uniqueness.
+  Implemented in `RII-29`.
+- Session cookie: `session_id`, httpOnly, `SameSite=Lax`, `Secure` only when
+  `NODE_ENV=production` (dev runs over plain http). Backed by the `sessions` table
+  (§4) — a bearer-style opaque token, not a signed/stateless cookie, specifically so
+  logout can revoke it server-side. See `server/src/session.ts`.
+- `POST /login`, `POST /logout`, `GET /me` — not yet implemented. `RII-30`'s scope
+  narrowed to just these three endpoints, reusing `session.ts` as-is, since RII-29
+  already had to build the session mechanism itself.
+
+### Still deferred (Post-MVP)
+
+Hunting parties, area borders, date/party filtering, fog of war, admin role, English
+i18n — see Linear issues `RII-9` through `RII-14` for current requirements and open
+questions. Expand this section with concrete API/schema detail before starting each
+one; don't let it stay a stub once work begins.
 
 ## 9. Open questions / assumptions to confirm
 
