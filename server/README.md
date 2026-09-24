@@ -9,12 +9,19 @@ model and architecture context — this README only covers running it locally.
 From the repo root:
 
 ```sh
-docker compose up -d          # starts local Postgres on localhost:5432
+docker compose up -d          # starts local Postgres on localhost:5433
+                               # (add `sudo` if your user can't reach the Docker
+                               # daemon socket — some machines lock this down)
 cd server
 cp .env.example .env          # defaults already match docker-compose.yml
 npm install
 npm run prisma:migrate        # applies migrations (none yet beyond the initial no-op)
 ```
+
+Port 5433, not Postgres's usual 5432: on machines that already run a native/system
+Postgres on 5432, the container needs a different host port to avoid a bind conflict.
+If 5433 is also taken on your machine, change both `docker-compose.yml`'s port mapping
+and `DATABASE_URL` in your `.env` to whatever's free.
 
 ## Day to day
 

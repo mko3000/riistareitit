@@ -7,7 +7,10 @@ services:
       POSTGRES_PASSWORD: riistareitit
       POSTGRES_DB: riistareitit
     ports:
-      - '5432:5432'
+      # Host port 5433, not 5432: some dev machines already run a native
+      # Postgres on 5432 (see server/.env.example). Container-internal port
+      # stays 5432 — only the host-side mapping changes.
+      - '5433:5432'
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
