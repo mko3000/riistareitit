@@ -7,7 +7,21 @@ import authRoutes from './routes/auth.js'
 
 const app = Fastify({ logger: true })
 
-await app.register(cors, { origin: env.webOrigin, credentials: true })
+const isProduction = process.env.NODE_ENV === 'production'
+// Vite happily picks a different port than 5173 if something else already
+// holds it, which used to break CORS until WEB_ORIGIN was manually updated
+// to match. In dev, accept any localhost/127.0.0.1 origin regardless of
+// port; production still requires an exact match against WEB_ORIGIN.
+const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1):\d+$/
+
+await app.register(cors, {
+  credentials: true,
+  origin: isProduction
+    ? env.webOrigin
+    : (origin, callback) => {
+        callback(null, !origin || LOCAL_ORIGIN_RE.test(origin))
+      },
+})
 await app.register(cookie)
 await app.register(authRoutes)
 
