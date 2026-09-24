@@ -67,7 +67,10 @@ Tables marked **(Post-MVP)** are not required until their feature ships, but the
 nullable FKs they'd need are noted on the MVP tables now.
 
 ```sql
--- (Post-MVP: RII-8, RII-9) — users and roles
+-- Implemented in RII-28 (accounts moved into MVP scope, RII-8). Case-insensitive
+-- email uniqueness is enforced at the application layer (lowercase before every
+-- write/lookup) — see server/prisma/schema.prisma for the reasoning. `role` is
+-- unused until RII-9 (admin role, still Post-MVP), always 'member' for now.
 CREATE TABLE users (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email         TEXT UNIQUE NOT NULL,
