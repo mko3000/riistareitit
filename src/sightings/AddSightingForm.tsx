@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, RefObject } from 'react'
+import type { Popup as LeafletPopup } from 'leaflet'
 import {
   createSighting,
   getMe,
@@ -15,6 +16,12 @@ interface AddSightingFormProps {
   lat: number
   lng: number
   onCreated: (sighting: PublicSighting) => void
+  // See SightingDetailPopup for why this is needed: react-leaflet portals
+  // content into the popup rather than going through Leaflet's own
+  // setContent(), so nothing tells the popup to resize as fields toggle
+  // (e.g. "Other" species revealing a text input) without calling
+  // popupRef.current.update() ourselves.
+  popupRef: RefObject<LeafletPopup | null>
 }
 
 // RII-22: the popup form opened by tapping the map. Rendered inside a
@@ -22,7 +29,7 @@ interface AddSightingFormProps {
 // right) is the ticket's cancel action; nothing custom needed for that.
 // Field rendering itself lives in SightingFieldsFieldset, shared with
 // RII-23's edit mode.
-export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
+export function AddSightingForm({ lat, lng, onCreated, popupRef }: AddSightingFormProps) {
   const [speciesList, setSpeciesList] = useState<Species[]>([])
   const [kind, setKind] = useState<Kind>('sighting')
   const [selectedSpecies, setSelectedSpecies] = useState<string | null>(null)
@@ -40,6 +47,10 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
     getSpecies().then(setSpeciesList)
     getMe().then((user) => setPersonDisplay(user?.displayName ?? 'unknown'))
   }, [])
+
+  useEffect(() => {
+    popupRef.current?.update()
+  })
 
   const isValid =
     (selectedSpecies !== null && selectedSpecies !== OTHER) ||

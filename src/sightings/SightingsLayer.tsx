@@ -1,17 +1,13 @@
-import { useEffect, useState } from 'react'
-import { CircleMarker, Popup, useMapEvents } from 'react-leaflet'
+import { useEffect, useRef, useState } from 'react'
+import { Popup, useMapEvents } from 'react-leaflet'
+import type { Popup as LeafletPopup } from 'leaflet'
 import { getSightings, type PublicSighting } from '../api'
 import { AddSightingForm } from './AddSightingForm'
-import { SightingDetailPopup } from './SightingDetailPopup'
+import { SightingMarker } from './SightingMarker'
 
 interface PendingLocation {
   lat: number
   lng: number
-}
-
-const MARKER_COLOR: Record<PublicSighting['kind'], string> = {
-  sighting: '#2563eb', // same blue as .link-button, for visual consistency
-  kill: '#b00020', // same red as .field-error/.form-error
 }
 
 // RII-22/RII-23. Rendered as a child of <MapContainer> (useMapEvents only
@@ -21,6 +17,7 @@ const MARKER_COLOR: Record<PublicSighting['kind'], string> = {
 export function SightingsLayer() {
   const [sightings, setSightings] = useState<PublicSighting[]>([])
   const [pendingLocation, setPendingLocation] = useState<PendingLocation | null>(null)
+  const addPopupRef = useRef<LeafletPopup>(null)
 
   useEffect(() => {
     getSightings().then(setSightings)
@@ -53,32 +50,12 @@ export function SightingsLayer() {
   return (
     <>
       {sightings.map((sighting) => (
-        <CircleMarker
-          key={sighting.id}
-          center={[sighting.lat, sighting.lng]}
-          radius={8}
-          pathOptions={{
-            color: MARKER_COLOR[sighting.kind],
-            fillColor: MARKER_COLOR[sighting.kind],
-            fillOpacity: 0.9,
-          }}
-        >
-          {/* Nested Popup: Leaflet opens/closes this natively on marker
-              click/close, no manual "which marker is open" state needed.
-              autoPan left on (unlike the add-flow popup below): view→edit
-              mode is a big content-size jump, and disabling autoPan here
-              caused the popup's white background to stop resizing to fit
-              — content spilled out past it instead. This popup never
-              actually had the "closes unexpectedly" bug the add-flow one
-              did, so there was no tradeoff in re-enabling it. */}
-          <Popup>
-            <SightingDetailPopup sighting={sighting} onUpdated={handleUpdated} onDeleted={handleDeleted} />
-          </Popup>
-        </CircleMarker>
+        <SightingMarker key={sighting.id} sighting={sighting} onUpdated={handleUpdated} onDeleted={handleDeleted} />
       ))}
 
       {pendingLocation && (
         <Popup
+          ref={addPopupRef}
           position={[pendingLocation.lat, pendingLocation.lng]}
           eventHandlers={{ remove: () => setPendingLocation(null) }}
           // The form's content resizes as fields toggle (e.g. editing the
@@ -89,7 +66,12 @@ export function SightingsLayer() {
           // where the user just tapped).
           autoPan={false}
         >
-          <AddSightingForm lat={pendingLocation.lat} lng={pendingLocation.lng} onCreated={handleCreated} />
+          <AddSightingForm
+            lat={pendingLocation.lat}
+            lng={pendingLocation.lng}
+            onCreated={handleCreated}
+            popupRef={addPopupRef}
+          />
         </Popup>
       )}
     </>

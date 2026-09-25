@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import type { FormEvent } from 'react'
+import { useEffect, useState } from 'react'
+import type { FormEvent, RefObject } from 'react'
+import type { Popup as LeafletPopup } from 'leaflet'
 import {
   deleteSighting,
   getSpecies,
@@ -15,12 +16,28 @@ interface SightingDetailPopupProps {
   sighting: PublicSighting
   onUpdated: (sighting: PublicSighting) => void
   onDeleted: (id: string) => void
+  // react-leaflet 5 has no usePopup() hook — SightingMarker holds the ref
+  // to its own Popup instance and passes it down, since a ref can only be
+  // created in a real component, not inside the .map() that renders markers.
+  popupRef: RefObject<LeafletPopup | null>
 }
 
 // RII-23: rendered as the Popup content nested inside each marker (see
-// SightingsLayer) — Leaflet opens/closes it natively on marker click, no
+// SightingMarker) — Leaflet opens/closes it natively on marker click, no
 // open/closed state to manage here beyond view-vs-edit mode.
-export function SightingDetailPopup({ sighting, onUpdated, onDeleted }: SightingDetailPopupProps) {
+export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }: SightingDetailPopupProps) {
+  // react-leaflet renders this component's output into Leaflet's popup via
+  // a portal — it doesn't go through Leaflet's own setContent(), which is
+  // what normally tells a popup its content size changed. Without this,
+  // switching view -> edit mode (a large size jump) left the popup's white
+  // background at its old (smaller) size while the actual content, no
+  // longer confined to it, rendered past its edges. Re-running .update()
+  // after every render keeps the two in sync regardless of which field
+  // toggle caused the resize.
+  useEffect(() => {
+    popupRef.current?.update()
+  })
+
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const [speciesList, setSpeciesList] = useState<Species[]>([])
 
