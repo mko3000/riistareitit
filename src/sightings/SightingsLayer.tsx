@@ -17,9 +17,8 @@ interface PendingMoveTarget {
 }
 
 // RII-22/RII-23/RII-34. Rendered as a child of <MapContainer> (useMapEvents
-// only works inside the map's own React tree). Markers here are
-// deliberately basic — a colored dot distinguishing sighting vs. kill —
-// per-species icons are RII-5's job, not any of these tickets'.
+// only works inside the map's own React tree). Marker appearance
+// (species icon + sighting/kill color, RII-5) lives in speciesIcons.ts.
 export function SightingsLayer() {
   const [sightings, setSightings] = useState<PublicSighting[]>([])
   const [pendingLocation, setPendingLocation] = useState<PendingLocation | null>(null)
