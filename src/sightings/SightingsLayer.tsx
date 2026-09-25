@@ -64,8 +64,14 @@ export function SightingsLayer() {
           }}
         >
           {/* Nested Popup: Leaflet opens/closes this natively on marker
-              click/close, no manual "which marker is open" state needed. */}
-          <Popup autoPan={false}>
+              click/close, no manual "which marker is open" state needed.
+              autoPan left on (unlike the add-flow popup below): view→edit
+              mode is a big content-size jump, and disabling autoPan here
+              caused the popup's white background to stop resizing to fit
+              — content spilled out past it instead. This popup never
+              actually had the "closes unexpectedly" bug the add-flow one
+              did, so there was no tradeoff in re-enabling it. */}
+          <Popup>
             <SightingDetailPopup sighting={sighting} onUpdated={handleUpdated} onDeleted={handleDeleted} />
           </Popup>
         </CircleMarker>
