@@ -214,6 +214,26 @@ Notes:
   density at render/query time, not stored as its own table — revisit if that proves
   too slow at scale.
 
+### Sightings API
+
+- `GET /species` — lists all `species` rows. Not an explicit ticket requirement anywhere
+  but required by one: the species-picker buttons (`RII-22`) have to read their options
+  from somewhere. Implemented in `RII-22`.
+- `GET /sightings` — lists all sightings, each joined with its `species` (`key`/`nameFi`/
+  `icon`) if set. No filtering (see the visibility note above). Implemented in `RII-22`.
+- `POST /sightings` — creates one. Body: `lat`, `lng`, one of `speciesKey`(matches
+  `species.key`)/`customSpecies`, `kind` (defaults `"sighting"`), `personDisplay`
+  (defaults to the session user's display name, or `"unknown"`), `observedDate`
+  (defaults today), `observedTime` (optional, `"HH:MM"`). `400` with per-field
+  `fieldErrors` on invalid input, same pattern as `/signup`. Implemented in `RII-22`.
+- `observed_date`/`observed_time` round-trip as plain `"YYYY-MM-DD"`/`"HH:MM"` strings,
+  not full ISO timestamps — formatted server-side with UTC getters specifically to avoid
+  a local-timezone round-trip shifting the date/time depending on where the server runs.
+  See `server/src/routes/sightings.ts`'s `formatDate`/`formatTime`.
+- Basic marker rendering (a colored dot, blue for sighting / red for kill, reusing the
+  app's existing link/error colors) is in `src/sightings/SightingsLayer.tsx`. Per-species
+  icons are `RII-5`, not yet built.
+
 ## 5. Track import (RII-2 and sub-issues)
 
 Every supported format is parsed into one common in-memory shape before it touches the
