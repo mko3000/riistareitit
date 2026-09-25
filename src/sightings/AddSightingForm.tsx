@@ -8,7 +8,7 @@ import {
   type Species,
   type SightingFieldErrors,
 } from '../api'
-import { nowRoundedTo30Min, todayIsoDate } from './dateTime'
+import { HALF_HOUR_OPTIONS, nowRoundedTo30Min, todayIsoDate } from './dateTime'
 
 interface AddSightingFormProps {
   lat: number
@@ -177,7 +177,13 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
 
       <label>
         Time
-        <input type="time" step={1800} value={time} onChange={(e) => setTime(e.target.value)} />
+        <select value={time} onChange={(e) => setTime(e.target.value)}>
+          {HALF_HOUR_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
       </label>
 
       {formError && <p className="form-error">{formError}</p>}
