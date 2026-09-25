@@ -265,6 +265,17 @@ Notes:
 - Notes was initially excluded from the add popup by design (kept the fast add-path
   minimal), then added there too on Miko's follow-up request 2026-09-25 — optional in
   both, so it doesn't slow down a quick add if left blank.
+- **react-leaflet Popup content resizing:** react-leaflet renders a `Popup`'s children
+  into Leaflet's content DOM via a React portal, bypassing Leaflet's own `setContent()`
+  — which is what normally tells a popup to recalculate its wrapper size. Neither the
+  add form nor the marker-detail popup resize their white background automatically when
+  their content's size changes (e.g. view → edit mode, or "Other" species revealing a
+  text input) without calling the underlying Leaflet popup's `.update()` manually.
+  react-leaflet 5 has no `usePopup()` hook, so both popups pass a `ref` to their content
+  and call `popupRef.current?.update()` in a dependency-less `useEffect` (i.e. every
+  render). For per-marker popups, the ref has to live in a real component — a ref can't
+  be created inside the `.map()` that renders them — hence `SightingMarker.tsx` existing
+  as its own component rather than being inlined in `SightingsLayer.tsx`.
 
 ## 5. Track import (RII-2 and sub-issues)
 
