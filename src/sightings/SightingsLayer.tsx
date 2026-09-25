@@ -58,6 +58,13 @@ export function SightingsLayer() {
         <Popup
           position={[pendingLocation.lat, pendingLocation.lng]}
           eventHandlers={{ remove: () => setPendingLocation(null) }}
+          // The form's content resizes as fields toggle (e.g. editing the
+          // person name, picking "Other" species) — autoPan repositioning
+          // the map mid-edit was a suspected trigger for the popup
+          // appearing to close unexpectedly. Disabled since this popup
+          // doesn't need to auto-pan into view anyway (it opens exactly
+          // where the user just tapped).
+          autoPan={false}
         >
           <AddSightingForm lat={pendingLocation.lat} lng={pendingLocation.lng} onCreated={handleCreated} />
         </Popup>

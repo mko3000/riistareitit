@@ -76,7 +76,11 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
   }
 
   return (
-    <form className="sighting-form" onSubmit={handleSubmit}>
+    // Extra safety net on top of Leaflet's own disableClickPropagation:
+    // stop every click here from bubbling past this form, so nothing
+    // upstream (the map, the popup's own resize/reposition handling) ever
+    // sees a click as originating outside the popup.
+    <form className="sighting-form" onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()}>
       <div className="button-row" role="group" aria-label="Type">
         <button
           type="button"
@@ -122,14 +126,35 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
 
       <div className="person-row">
         {editingPerson ? (
-          <input
-            type="text"
-            value={personDisplay}
-            onChange={(e) => setPersonDisplay(e.target.value)}
-            onBlur={() => setEditingPerson(false)}
-            aria-label="Person"
-            autoFocus
-          />
+          <>
+            <input
+              type="text"
+              value={personDisplay}
+              onChange={(e) => setPersonDisplay(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter confirms and exits edit mode, rather than letting it
+                // fall through to native implicit form submission.
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  setEditingPerson(false)
+                }
+              }}
+              aria-label="Person"
+              autoFocus
+            />
+            {/* Explicit confirm button, not onBlur — onBlur firing at an
+                unexpected moment (e.g. if the popup repositions itself as
+                its content resizes) was the suspected cause of the whole
+                popup appearing to close when editing the name. */}
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setEditingPerson(false)}
+              aria-label="Done editing person"
+            >
+              ✓
+            </button>
+          </>
         ) : (
           <>
             <span>{personDisplay}</span>
