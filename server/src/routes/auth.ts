@@ -1,8 +1,14 @@
 import type { FastifyInstance } from 'fastify'
 import { Prisma, type User } from '@prisma/client'
 import { prisma } from '../prisma.js'
-import { hashPassword } from '../password.js'
-import { createSession, setSessionCookie } from '../session.js'
+import { hashPassword, verifyPassword } from '../password.js'
+import {
+  createSession,
+  setSessionCookie,
+  clearSessionCookie,
+  getSessionUser,
+  SESSION_COOKIE_NAME,
+} from '../session.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MIN_PASSWORD_LENGTH = 8
@@ -10,6 +16,11 @@ const MIN_PASSWORD_LENGTH = 8
 interface SignUpBody {
   email?: unknown
   displayName?: unknown
+  password?: unknown
+}
+
+interface LoginBody {
+  email?: unknown
   password?: unknown
 }
 
@@ -79,5 +90,55 @@ export default async function authRoutes(app: FastifyInstance) {
     setSessionCookie(reply, session)
 
     return reply.status(201).send({ user: toPublicUser(user) })
+  })
+
+  app.post('/login', async (request, reply) => {
+    const body = request.body as LoginBody
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const password = typeof body.password === 'string' ? body.password : ''
+
+    // Same generic response either way — don't reveal whether the email is
+    // registered.
+    const invalidCredentials = () =>
+      reply.status(401).send({ error: 'invalid_credentials', message: 'Incorrect email or password.' })
+
+    if (!email || !password) {
+      return invalidCredentials()
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } })
+    if (!user) {
+      return invalidCredentials()
+    }
+
+    const passwordMatches = await verifyPassword(user.passwordHash, password)
+    if (!passwordMatches) {
+      return invalidCredentials()
+    }
+
+    const session = await createSession(user.id)
+    setSessionCookie(reply, session)
+
+    return reply.send({ user: toPublicUser(user) })
+  })
+
+  app.post('/logout', async (request, reply) => {
+    const sessionId = request.cookies[SESSION_COOKIE_NAME]
+    if (sessionId) {
+      // deleteMany, not delete: idempotent if the session is already gone
+      // (expired cleanup, double-click, etc.) rather than throwing.
+      await prisma.session.deleteMany({ where: { id: sessionId } })
+    }
+    clearSessionCookie(reply)
+    return reply.status(204).send()
+  })
+
+  // 200 + { user: null } for the anonymous case, not 401: being logged out
+  // is the normal, expected state for this endpoint (login is optional
+  // app-wide, RII-8) — it's not an error condition every page load has to
+  // treat as a failure.
+  app.get('/me', async (request, reply) => {
+    const user = await getSessionUser(request)
+    return reply.send({ user: user ? toPublicUser(user) : null })
   })
 }
