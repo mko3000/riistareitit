@@ -134,7 +134,8 @@ CREATE INDEX ON track_points (track_id, sequence);
 -- MVP: RII-4, RII-5, RII-20, RII-22 — species reference list
 CREATE TABLE species (
   id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  key       TEXT UNIQUE NOT NULL,   -- e.g. 'metso'
+  key       TEXT UNIQUE NOT NULL,   -- English identifier, e.g. 'capercaillie' — code
+                                    -- matches against this; name_fi is what the UI shows
   name_fi   TEXT NOT NULL,
   name_en   TEXT,                   -- filled in for RII-14 (English toggle)
   icon      TEXT NOT NULL,          -- icon identifier/asset reference
