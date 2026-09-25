@@ -33,6 +33,12 @@ app.setErrorHandler((err: Error & { statusCode?: number }, _request, reply) => {
 
 await app.register(cors, {
   credentials: true,
+  // Explicit, not left to @fastify/cors's default per-route reflection:
+  // that reflection doesn't reliably see methods registered on
+  // parameterized routes (e.g. PATCH/DELETE /sightings/:id) in a plugin
+  // registered after cors itself — confirmed live, restarting the server
+  // didn't fix a PATCH preflight rejection until this was made explicit.
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
   origin: isProduction
     ? env.webOrigin
     : (origin, callback) => {
