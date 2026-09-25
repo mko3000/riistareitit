@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { CircleMarker, Popup, useMapEvents } from 'react-leaflet'
 import { getSightings, type PublicSighting } from '../api'
 import { AddSightingForm } from './AddSightingForm'
+import { SightingDetailPopup } from './SightingDetailPopup'
 
 interface PendingLocation {
   lat: number
@@ -13,10 +14,10 @@ const MARKER_COLOR: Record<PublicSighting['kind'], string> = {
   kill: '#b00020', // same red as .field-error/.form-error
 }
 
-// RII-22. Rendered as a child of <MapContainer> (useMapEvents only works
-// inside the map's own React tree). Markers here are deliberately basic —
-// a colored dot distinguishing sighting vs. kill — per-species icons are
-// RII-5's job, not this ticket's.
+// RII-22/RII-23. Rendered as a child of <MapContainer> (useMapEvents only
+// works inside the map's own React tree). Markers here are deliberately
+// basic — a colored dot distinguishing sighting vs. kill — per-species
+// icons are RII-5's job, not either ticket's.
 export function SightingsLayer() {
   const [sightings, setSightings] = useState<PublicSighting[]>([])
   const [pendingLocation, setPendingLocation] = useState<PendingLocation | null>(null)
@@ -27,8 +28,10 @@ export function SightingsLayer() {
 
   useMapEvents({
     click(event) {
-      // Ignore taps while a form is already open — avoid silently
-      // relocating the pending add or opening a second one.
+      // Ignore taps while the add form is already open — avoid silently
+      // relocating the pending add or opening a second one. Taps on an
+      // *existing* marker never reach here at all: Leaflet's marker click
+      // handling stops the event from also being seen as a map click.
       if (pendingLocation) return
       setPendingLocation({ lat: event.latlng.lat, lng: event.latlng.lng })
     },
@@ -37,6 +40,14 @@ export function SightingsLayer() {
   function handleCreated(sighting: PublicSighting) {
     setSightings((current) => [sighting, ...current])
     setPendingLocation(null)
+  }
+
+  function handleUpdated(updated: PublicSighting) {
+    setSightings((current) => current.map((s) => (s.id === updated.id ? updated : s)))
+  }
+
+  function handleDeleted(id: string) {
+    setSightings((current) => current.filter((s) => s.id !== id))
   }
 
   return (
@@ -51,7 +62,13 @@ export function SightingsLayer() {
             fillColor: MARKER_COLOR[sighting.kind],
             fillOpacity: 0.9,
           }}
-        />
+        >
+          {/* Nested Popup: Leaflet opens/closes this natively on marker
+              click/close, no manual "which marker is open" state needed. */}
+          <Popup autoPan={false}>
+            <SightingDetailPopup sighting={sighting} onUpdated={handleUpdated} onDeleted={handleDeleted} />
+          </Popup>
+        </CircleMarker>
       ))}
 
       {pendingLocation && (

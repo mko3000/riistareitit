@@ -15,6 +15,22 @@ const isProduction = process.env.NODE_ENV === 'production'
 // port; production still requires an exact match against WEB_ORIGIN.
 const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1):\d+$/
 
+// Found during RII-22 manual testing: an unhandled error (e.g. a missing
+// migration) was reaching the browser as a raw Prisma stack trace, since
+// Fastify's default error handler echoes the thrown error's own message.
+// Log the real error server-side; never leak internals to the client.
+//
+// Must be set before registering the route plugins below, not after: a
+// custom error handler only propagates into a plugin's encapsulated
+// context if it was set before that plugin was registered, not
+// retroactively — confirmed the hard way, this silently did nothing when
+// it was below the app.register() calls instead of above them.
+app.setErrorHandler((err: Error & { statusCode?: number }, _request, reply) => {
+  app.log.error(err)
+  const status = err.statusCode ?? 500
+  reply.status(status).send({ error: 'internal_error', message: 'Something went wrong. Please try again.' })
+})
+
 await app.register(cors, {
   credentials: true,
   origin: isProduction
