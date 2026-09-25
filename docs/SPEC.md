@@ -277,10 +277,16 @@ Notes:
   render). For per-marker popups, the ref has to live in a real component — a ref can't
   be created inside the `.map()` that renders them — hence `SightingMarker.tsx` existing
   as its own component rather than being inlined in `SightingsLayer.tsx`.
-- **Move a marking's location** (`RII-34`): edit mode's **Move** button closes the
-  popup (`popupRef.current?.close()`) and tells `SightingsLayer` "waiting for a tap for
-  sighting X" (`movingSightingId`). The next map click delivers `{ sightingId, lat, lng
-  }` as a one-shot `pendingMoveTarget`, filtered down to the matching `SightingMarker`,
+- **Coordinates are shown in the popup**, on Miko's follow-up request 2026-09-25: view
+  mode as a plain read-only line, edit mode as the same text+pencil pattern the person
+  field uses (`formatCoords()`, 5 decimals — plenty of precision for "did the pin end
+  up roughly where I tapped"). The pencil next to the coordinates *is* the move
+  trigger now — replaces the earlier standalone **Move** text button in
+  `.edit-actions`, which is gone.
+- **Move a marking's location** (`RII-34`): the coordinates row's pencil (edit mode)
+  closes the popup (`popupRef.current?.close()`) and tells `SightingsLayer` "waiting for
+  a tap for sighting X" (`movingSightingId`). The next map click delivers
+  `{ sightingId, lat, lng }` as a one-shot `pendingMoveTarget`, filtered down to the matching `SightingMarker`,
   which reopens the popup (`popupRef.current?.openOn(map)`, needs `useMap()`) and stores
   the new coordinates as its own `stagedPosition` — not persisted until the existing
   **Save** button is pressed (staged, not immediate; see the ticket's own open question

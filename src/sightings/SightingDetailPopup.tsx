@@ -12,6 +12,12 @@ import {
 import { nowRoundedTo30Min } from './dateTime'
 import { SightingFieldsFieldset, OTHER, type Kind } from './SightingFieldsFieldset'
 
+// 5 decimals is ~1.1m of precision at these latitudes — plenty for "did the
+// pin end up roughly where I tapped", without a long string of noise digits.
+function formatCoords(lat: number, lng: number): string {
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+}
+
 interface SightingDetailPopupProps {
   sighting: PublicSighting
   // RII-34: SightingMarker's single source of truth for "where is this
@@ -162,6 +168,7 @@ export function SightingDetailPopup({
         <p>
           <strong>{sighting.kind === 'kill' ? 'Kill' : 'Sighting'}</strong> — {speciesLabel}
         </p>
+        <p>{formatCoords(sighting.lat, sighting.lng)}</p>
         <p>{sighting.personDisplay}</p>
         <p>
           {sighting.observedDate}
@@ -177,6 +184,16 @@ export function SightingDetailPopup({
 
   return (
     <form className="sighting-form" onSubmit={handleSave} onClick={(e) => e.stopPropagation()}>
+      {/* Same text+pencil pattern as the person field (SightingFieldsFieldset)
+          — the pencil doesn't inline-edit here, it triggers the same map-tap
+          move flow the old standalone "Move" button did. */}
+      <div className="person-row">
+        <span>{formatCoords(currentPosition.lat, currentPosition.lng)}</span>
+        <button type="button" className="icon-button" onClick={onMove} aria-label="Move">
+          ✏️
+        </button>
+      </div>
+
       <SightingFieldsFieldset
         speciesList={speciesList}
         kind={kind}
@@ -210,9 +227,6 @@ export function SightingDetailPopup({
             aria-label="Delete"
           >
             🗑️
-          </button>
-          <button type="button" onClick={onMove}>
-            Move
           </button>
         </div>
         <div className="edit-actions-group">
