@@ -113,7 +113,11 @@ export function SightingDetailPopup({ sighting, onUpdated, onDeleted }: Sighting
   if (mode === 'view') {
     const speciesLabel = sighting.species?.nameFi ?? sighting.customSpecies ?? '?'
     return (
-      <div className="sighting-detail">
+      // Same stopPropagation as the edit-mode form below — this was missing
+      // here, which is exactly why clicking "edit" leaked through to the
+      // map's own click handler and opened a new add-popup at the marker's
+      // location instead of just switching this popup to edit mode.
+      <div className="sighting-detail" onClick={(e) => e.stopPropagation()}>
         <p>
           <strong>{sighting.kind === 'kill' ? 'Kill' : 'Sighting'}</strong> — {speciesLabel}
         </p>
