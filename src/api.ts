@@ -74,3 +74,93 @@ export async function getMe(): Promise<PublicUser | null> {
     return null
   }
 }
+
+// RII-22
+
+export interface Species {
+  key: string
+  nameFi: string
+  nameEn: string | null
+  icon: string
+}
+
+export interface PublicSighting {
+  id: string
+  lat: number
+  lng: number
+  species: { key: string; nameFi: string; icon: string } | null
+  customSpecies: string | null
+  kind: 'sighting' | 'kill'
+  notes: string | null
+  personDisplay: string
+  observedDate: string // "YYYY-MM-DD"
+  observedTime: string | null // "HH:MM"
+  createdAt: string
+  updatedAt: string
+}
+
+// Resolves to [] on failure rather than throwing — species/sightings not
+// loading shouldn't crash the map, just leave it looking empty.
+export async function getSpecies(): Promise<Species[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/species`, { credentials: 'include' })
+    if (!response.ok) return []
+    const body = await response.json()
+    return body.species ?? []
+  } catch {
+    return []
+  }
+}
+
+export async function getSightings(): Promise<PublicSighting[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/sightings`, { credentials: 'include' })
+    if (!response.ok) return []
+    const body = await response.json()
+    return body.sightings ?? []
+  } catch {
+    return []
+  }
+}
+
+export type SightingFieldErrors = Partial<
+  Record<'lat' | 'lng' | 'species' | 'kind' | 'observedDate' | 'observedTime', string>
+>
+
+export type CreateSightingResult =
+  | { ok: true; sighting: PublicSighting }
+  | { ok: false; message: string; fieldErrors?: SightingFieldErrors }
+
+export async function createSighting(input: {
+  lat: number
+  lng: number
+  speciesKey?: string
+  customSpecies?: string
+  kind: 'sighting' | 'kill'
+  personDisplay: string
+  observedDate: string
+  observedTime?: string
+}): Promise<CreateSightingResult> {
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}/sightings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(input),
+    })
+  } catch {
+    return { ok: false, message: "Couldn't reach the server. Is it running?" }
+  }
+
+  const body = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    if (body?.error === 'invalid_input') {
+      return { ok: false, message: 'Please fix the errors below.', fieldErrors: body.fieldErrors }
+    }
+    return { ok: false, message: body?.message ?? 'Could not save. Please try again.' }
+  }
+
+  return { ok: true, sighting: body.sighting }
+}
