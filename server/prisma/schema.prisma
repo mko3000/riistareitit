@@ -30,7 +30,8 @@ model User {
   role         String   @default("member")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  sessions Session[]
+  sessions  Session[]
+  sightings Sighting[]
 
   @@map("users")
 }
@@ -55,4 +56,52 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+// RII-20. Preset bird species for the sighting/kill species picker (RII-22).
+// `nameEn` stays null until RII-14 (English toggle) fills it in.
+model Species {
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key      String  @unique
+  nameFi   String  @map("name_fi")
+  nameEn   String? @map("name_en")
+  icon     String
+  isPreset Boolean @default(true) @map("is_preset")
+
+  sightings Sighting[]
+
+  @@map("species")
+}
+
+// RII-20. See docs/SPEC.md §4's notes on this table for the reasoning behind
+// splitting `personDisplay` (free text — who actually saw/killed it, may not
+// be a user at all) from `createdByUserId` (who was logged in when the row
+// was added; independent of personDisplay; ON DELETE SET NULL so deleting an
+// account never deletes the sighting itself).
+//
+// Editing/deleting is deliberately unrestricted for now (RII-23) — anyone
+// can edit/delete any row. `createdByUserId` exists so that can be locked
+// down later without a schema change. Visibility is also unrestricted for
+// now (RII-22's GET /sightings returns everything to everyone) — see RII-33
+// for the not-yet-resolved party-scoped privacy design this needs before
+// real (non-testing) use.
+model Sighting {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lat             Float
+  lng             Float
+  speciesId       String?   @map("species_id") @db.Uuid
+  species         Species?  @relation(fields: [speciesId], references: [id])
+  customSpecies   String?   @map("custom_species")
+  kind            String    @default("sighting") // "sighting" | "kill"
+  notes           String?
+  personDisplay   String    @default("unknown") @map("person_display")
+  createdByUserId String?   @map("created_by_user_id") @db.Uuid
+  createdBy       User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  observedDate    DateTime  @map("observed_date") @db.Date
+  observedTime    DateTime? @map("observed_time") @db.Time
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([observedDate])
+  @@map("sightings")
 }

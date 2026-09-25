@@ -131,7 +131,7 @@ CREATE TABLE track_points (
 );
 CREATE INDEX ON track_points (track_id, sequence);
 
--- MVP: RII-4, RII-5, RII-21 — species reference list
+-- MVP: RII-4, RII-5, RII-20, RII-22 — species reference list
 CREATE TABLE species (
   id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   key       TEXT UNIQUE NOT NULL,   -- e.g. 'metso'
@@ -140,30 +140,35 @@ CREATE TABLE species (
   icon      TEXT NOT NULL,          -- icon identifier/asset reference
   is_preset BOOLEAN NOT NULL DEFAULT true
 );
--- Seed rows (minimum required by RII-21): metso, teeri, pyy, riekko.
+-- Seed rows (RII-20's job, read by RII-22's species picker): metso, teeri, pyy, riekko.
 
--- MVP: RII-4, RII-20, RII-22, RII-23, RII-24 — sightings and kills
+-- MVP: RII-4, RII-20, RII-22, RII-23 — sightings and kills
 CREATE TABLE sightings (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  lat               DOUBLE PRECISION NOT NULL,
-  lng               DOUBLE PRECISION NOT NULL,
-  species_id        UUID REFERENCES species(id),
-  custom_species    TEXT,              -- set instead of species_id for free-text species
-  kind              TEXT NOT NULL DEFAULT 'sighting', -- 'sighting' | 'kill'
-  notes             TEXT,
-  person_display    TEXT NOT NULL DEFAULT 'unknown',  -- free text; adjustable per RII-4
-  person_user_id    UUID REFERENCES users(id),         -- set when attributable to an account
-  observed_date     DATE NOT NULL,
-  observed_time     TIME,
-  track_id          UUID REFERENCES tracks(id),  -- the walk this was logged during, if any
-  party_id          UUID REFERENCES hunting_parties(id),
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lat                 DOUBLE PRECISION NOT NULL,
+  lng                 DOUBLE PRECISION NOT NULL,
+  species_id          UUID REFERENCES species(id),
+  custom_species      TEXT,              -- set instead of species_id for free-text species
+  kind                TEXT NOT NULL DEFAULT 'sighting', -- 'sighting' | 'kill'
+  notes               TEXT,
+  person_display      TEXT NOT NULL DEFAULT 'unknown',  -- free text; who actually saw/killed it
+  created_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL, -- who was logged in when this was added; null if added anonymously
+  observed_date       DATE NOT NULL,
+  observed_time       TIME,
+  -- track_id and party_id below are the target shape, not yet implemented:
+  -- the tables they'd reference (tracks, hunting_parties) don't exist yet
+  -- (RII-2, RII-10). RII-20 ships without these two columns; they're added
+  -- via a follow-up migration once their target tables exist, rather than
+  -- as dangling/unconstrained UUIDs now.
+  -- track_id            UUID REFERENCES tracks(id),
+  -- party_id            UUID REFERENCES hunting_parties(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (species_id IS NOT NULL OR custom_species IS NOT NULL),
   CHECK (kind IN ('sighting', 'kill'))
 );
 CREATE INDEX ON sightings (observed_date);
-CREATE INDEX ON sightings (party_id);
+-- CREATE INDEX ON sightings (party_id); -- once party_id exists, see above
 
 -- (Post-MVP: RII-11) — hunting area borders
 CREATE TABLE hunting_areas (
@@ -178,12 +183,32 @@ CREATE TABLE hunting_areas (
 ```
 
 Notes:
-- `sightings.person_display` + `person_user_id` implement the "defaults to the adder,
-  or 'unknown', but adjustable to log on behalf of someone else" requirement (RII-4):
-  `person_display` is always shown; `person_user_id` is set only when it actually
-  corresponds to an account.
+- `sightings.person_display` and `created_by_user_id` answer two different questions,
+  deliberately kept independent (design discussion 2026-09-25, see `RII-20`):
+  `person_display` is "who actually saw/killed it" — free text, always shown, may not
+  correspond to any account (e.g. a hunting partner who doesn't use the app).
+  `created_by_user_id` is "who was logged in when this row was added" — for
+  accountability/audit and future permissions, and does **not** change based on what
+  `person_display` says. If Miko is logged in and types "Pekka" into the person field,
+  `created_by_user_id` still points at Miko's account; `person_display` says "Pekka".
+  `ON DELETE SET NULL`, not `CASCADE`: deleting a user account must never delete the
+  sighting data itself, only the "added by" attribution.
+- Editing/deleting a sighting is currently unrestricted — any user (or anonymous
+  visitor) can edit/delete any entry, not just its creator. Deliberate MVP choice for
+  a small trusted hunting-party context; `created_by_user_id` exists so this can be
+  locked down later (e.g. creator-or-party-member-only) without a schema change. Not
+  yet designed — don't build permission checks against this until that's decided.
 - Only `lat`/`lng`, `species_id`-or-`custom_species`, and `observed_date` are `NOT NULL`
   on `sightings` — every other field can be filled in later (RII-23).
+- **Visibility is currently global and unfiltered — every sighting is visible to every
+  visitor, logged in or not.** This is an explicit, temporary testing shortcut, not the
+  intended behavior: hunters don't want to broadcast sightings to the world. The real
+  model is very likely party-scoped (see `party_id` above, already reserved for this),
+  roughly "if you're not in the party that owns this land/data, you don't see it" — but
+  the exact rules (parties-of-one? multiple parties? a user in no party at all? shared
+  vs. private areas?) are **not designed yet**. `RII-33` tracks doing that design
+  properly before real (non-testing) deployment; don't build filtering logic ad hoc in
+  the meantime.
 - Fog of war (RII-13, Post-MVP) is computed from `track_points` coverage + `sightings`
   density at render/query time, not stored as its own table — revisit if that proves
   too slow at scale.
