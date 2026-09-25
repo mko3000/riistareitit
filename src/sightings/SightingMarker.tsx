@@ -99,7 +99,7 @@ export function SightingMarker({
   const currentPosition = stagedPosition ?? { lat: sighting.lat, lng: sighting.lng }
 
   return (
-    // RII-5: species silhouette on a sighting/kill-colored badge — see
+    // RII-5: species silhouette on a sighting/kill-colored map pin — see
     // speciesIcons.ts. Icon reflects the *saved* species/kind; unsaved edits
     // in the popup don't restyle the marker until Save, same as before.
     <Marker position={[currentPosition.lat, currentPosition.lng]} icon={markerIconFor(sighting)}>

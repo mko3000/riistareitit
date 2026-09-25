@@ -1,7 +1,7 @@
 import { divIcon, type DivIcon } from 'leaflet'
 import type { PublicSighting } from '../api'
 
-// RII-5: marker appearance. Species -> silhouette, kind -> badge color.
+// RII-5: marker appearance. Species -> silhouette, kind -> pin color.
 // See docs/SPEC.md §6 for the design rationale.
 
 type Kind = PublicSighting['kind']
@@ -11,10 +11,12 @@ export const MARKER_COLOR: Record<Kind, string> = {
   kill: '#b00020', // same red as .field-error/.form-error
 }
 
-const MARKER_SIZE = 28
+// Teardrop pin, tip at the bottom center = the marking's exact location.
+const PIN_WIDTH = 40
+const PIN_HEIGHT = 52
 
 // SVG markup inside a 24x24 viewBox, bird facing left. Shapes are drawn in
-// white; `{bg}` is replaced with the badge color for the few details that
+// white; `{bg}` is replaced with the pin color for the few details that
 // need to read as "cut out" of the silhouette (e.g. the hazel grouse's tail
 // band). Keyed by species.icon, not species.key — see SPEC.md §6.
 const SILHOUETTES: Record<string, string> = {
@@ -70,9 +72,11 @@ const FALLBACK_SILHOUETTE = `
 
 function markerSvg(silhouette: string, kind: Kind): string {
   const color = MARKER_COLOR[kind]
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${MARKER_SIZE}" height="${MARKER_SIZE}">
-    <circle cx="12" cy="12" r="11.2" fill="${color}" stroke="white" stroke-width="1.6"/>
-    <g transform="translate(3.6 3.6) scale(0.7)" fill="white">${silhouette.replaceAll('{bg}', color)}</g>
+  // The silhouette's 24x24 box is scaled to ~29px and centered in the
+  // pin's round head (center 20,19).
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PIN_WIDTH} ${PIN_HEIGHT}" width="${PIN_WIDTH}" height="${PIN_HEIGHT}">
+    <path d="M20 50 C15 42 2 32 2 19 A18 18 0 0 1 38 19 C38 32 25 42 20 50 Z" fill="${color}" stroke="white" stroke-width="2"/>
+    <g transform="translate(5.6 4.6) scale(1.2)" fill="white">${silhouette.replaceAll('{bg}', color)}</g>
   </svg>`
 }
 
@@ -93,9 +97,9 @@ export function markerIconFor(sighting: PublicSighting): DivIcon {
     icon = divIcon({
       html: markerSvg(silhouette, sighting.kind),
       className: 'sighting-marker',
-      iconSize: [MARKER_SIZE, MARKER_SIZE],
-      iconAnchor: [MARKER_SIZE / 2, MARKER_SIZE / 2],
-      popupAnchor: [0, -MARKER_SIZE / 2],
+      iconSize: [PIN_WIDTH, PIN_HEIGHT],
+      iconAnchor: [PIN_WIDTH / 2, PIN_HEIGHT - 2], // the tip (y=50)
+      popupAnchor: [0, -(PIN_HEIGHT - 2)],
     })
     iconCache.set(cacheKey, icon)
   }

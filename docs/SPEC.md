@@ -231,7 +231,7 @@ Notes:
   a local-timezone round-trip shifting the date/time depending on where the server runs.
   See `server/src/routes/sightings.ts`'s `formatDate`/`formatTime`.
 - Marker rendering: originally a plain colored dot (`RII-22`), replaced by per-species
-  icon badges in `RII-5` — see §6 for the current marker design.
+  icon map pins in `RII-5` — see §6 for the current marker design.
 - `PATCH /sightings/:id` — updates one. Same body shape as `POST` plus `notes`. The edit
   form always sends every field together rather than a sparse diff, so despite the verb
   this behaves as a full replace of the editable fields, not true partial-update
@@ -347,10 +347,13 @@ type ImportedTrack = {
 - Each sighting/kill renders as a marker: icon = species (`species.icon`), color =
   sighting vs. kill. Custom (non-preset) species get a fallback icon. Implemented in
   `RII-5`:
-  - **Shape:** a round badge (28px, white border + drop shadow), anchored at its
-    center — same "the center is the spot" semantics as `RII-22`'s original dot, so
-    existing markings don't visually shift. A white bird silhouette sits inside.
-  - **Color = kind**, on the badge background: blue `#2563eb` for sighting, red
+  - **Shape:** a teardrop map pin (40×52px, white border + drop shadow) whose
+    bottom tip sits exactly on the marking's `lat`/`lng`; the popup opens above the
+    pin's head. A white bird silhouette (~29px) fills the round head. Initially shipped
+    as a 28px center-anchored round badge; changed to a pin with a bigger silhouette
+    on Miko's request 2026-09-25 (easier to see the species, and a pin's tip is a more
+    precise "here" than a badge's center).
+  - **Color = kind**, on the pin's fill: blue `#2563eb` for sighting, red
     `#b00020` for kill (the app's existing link/error colors, unchanged from `RII-22`).
     Color is the only kind signal — the silhouette is identical for a sighting and a
     kill of the same species.
