@@ -250,9 +250,16 @@ it only attributes data to a real name instead of "unknown" once you have one.
   `NODE_ENV=production` (dev runs over plain http). Backed by the `sessions` table
   (§4) — a bearer-style opaque token, not a signed/stateless cookie, specifically so
   logout can revoke it server-side. See `server/src/session.ts`.
-- `POST /login`, `POST /logout`, `GET /me` — not yet implemented. `RII-30`'s scope
-  narrowed to just these three endpoints, reusing `session.ts` as-is, since RII-29
-  already had to build the session mechanism itself.
+- `POST /login` — `{ email, password }` → `200` with the user + a fresh session cookie.
+  Wrong password and unknown email both return the identical `401 invalid_credentials`
+  response (don't reveal which was wrong). Implemented in `RII-30`.
+- `POST /logout` — deletes only the *current* session's row (the one the request's
+  cookie names), not every session belonging to the user — logging out doesn't sign
+  you out of other devices/tabs. Always `204`, even if the cookie was already
+  missing/invalid (idempotent). Implemented in `RII-30`.
+- `GET /me` — `200` always, with `{ user: null }` when anonymous rather than `401`:
+  being logged out is this endpoint's normal case (login is optional app-wide), not
+  an error every page load has to branch on. Implemented in `RII-30`.
 
 ### Still deferred (Post-MVP)
 

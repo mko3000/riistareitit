@@ -40,3 +40,16 @@ body,
   color: #b00020;
   margin: 0.25rem 0;
 }
+
+/* RII-30: the sign-up/log-in toggle, styled as a link since it's a
+   secondary action next to the form's real submit button. */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-align: left;
+}

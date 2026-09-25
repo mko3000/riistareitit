@@ -4,12 +4,13 @@ import { signUp, type PublicUser, type SignUpFieldErrors } from '../api'
 
 interface SignupFormProps {
   onSignedUp: (user: PublicUser) => void
+  onSwitchToLogin: () => void
 }
 
 // RII-29: minimal sign-up form, no design system — matching the app's
 // existing minimal-CSS approach (RII-26). Where this form lives on the page
 // is temporary; RII-31 (top nav bar) is what gives it a permanent home.
-export function SignupForm({ onSignedUp }: SignupFormProps) {
+export function SignupForm({ onSignedUp, onSwitchToLogin }: SignupFormProps) {
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
@@ -76,6 +77,10 @@ export function SignupForm({ onSignedUp }: SignupFormProps) {
 
       <button type="submit" disabled={submitting}>
         {submitting ? 'Signing up…' : 'Sign up'}
+      </button>
+
+      <button type="button" className="link-button" onClick={onSwitchToLogin}>
+        Already have an account? Log in
       </button>
     </form>
   )
