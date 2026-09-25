@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   createSighting,
@@ -36,19 +36,9 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // getMe() is a real network + DB round-trip and can resolve well after the
-  // form has mounted. Without this guard, editing the person field before
-  // it resolves gets silently overwritten the moment it does — a race that
-  // fires essentially every time for a fast edit, not an occasional glitch.
-  const personTouchedRef = useRef(false)
-
   useEffect(() => {
     getSpecies().then(setSpeciesList)
-    getMe().then((user) => {
-      if (!personTouchedRef.current) {
-        setPersonDisplay(user?.displayName ?? 'unknown')
-      }
-    })
+    getMe().then((user) => setPersonDisplay(user?.displayName ?? 'unknown'))
   }, [])
 
   const isValid =
@@ -140,10 +130,7 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
             <input
               type="text"
               value={personDisplay}
-              onChange={(e) => {
-                personTouchedRef.current = true
-                setPersonDisplay(e.target.value)
-              }}
+              onChange={(e) => setPersonDisplay(e.target.value)}
               onKeyDown={(e) => {
                 // Enter confirms and exits edit mode, rather than letting it
                 // fall through to native implicit form submission.
