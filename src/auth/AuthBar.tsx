@@ -54,12 +54,6 @@ export function AuthBar() {
             >
               Log in
             </button>
-            <button
-              type="button"
-              onClick={() => setAuthView((current) => (current === 'signup' ? null : 'signup'))}
-            >
-              Sign up
-            </button>
           </>
         )}
       </div>
