@@ -1,13 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { CircleMarker, Popup, useMap } from 'react-leaflet'
+import { Marker, Popup, useMap } from 'react-leaflet'
 import type { Popup as LeafletPopup } from 'leaflet'
 import type { PublicSighting } from '../api'
 import { SightingDetailPopup } from './SightingDetailPopup'
-
-const MARKER_COLOR: Record<PublicSighting['kind'], string> = {
-  sighting: '#2563eb', // same blue as .link-button, for visual consistency
-  kill: '#b00020', // same red as .field-error/.form-error
-}
+import { markerIconFor } from './speciesIcons'
 
 interface MoveTarget {
   lat: number
@@ -103,15 +99,10 @@ export function SightingMarker({
   const currentPosition = stagedPosition ?? { lat: sighting.lat, lng: sighting.lng }
 
   return (
-    <CircleMarker
-      center={[currentPosition.lat, currentPosition.lng]}
-      radius={8}
-      pathOptions={{
-        color: MARKER_COLOR[sighting.kind],
-        fillColor: MARKER_COLOR[sighting.kind],
-        fillOpacity: 0.9,
-      }}
-    >
+    // RII-5: species silhouette on a sighting/kill-colored badge — see
+    // speciesIcons.ts. Icon reflects the *saved* species/kind; unsaved edits
+    // in the popup don't restyle the marker until Save, same as before.
+    <Marker position={[currentPosition.lat, currentPosition.lng]} icon={markerIconFor(sighting)}>
       {/* remove fires on any close, including Leaflet's own "×" button —
           not just our explicit Cancel button — so a staged-but-unsaved
           move gets reverted no matter how the popup was closed. Also fires
@@ -129,6 +120,6 @@ export function SightingMarker({
           onMove={handleMove}
         />
       </Popup>
-    </CircleMarker>
+    </Marker>
   )
 }

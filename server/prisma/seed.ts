@@ -10,8 +10,8 @@ const prisma = new PrismaClient()
 // though nothing reads it until RII-14 (English toggle) — no reason to
 // re-derive the same English names later when we already need them here to
 // pick sensible keys.
-// `icon` is a placeholder equal to `key` for now — real per-species icons
-// are RII-5's job, not this ticket's.
+// `icon` equals `key` — it's the id the frontend's icon registry
+// (src/sightings/speciesIcons.ts, RII-5) looks each silhouette up by.
 const PRESET_SPECIES = [
   { key: 'capercaillie', nameFi: 'Metso', nameEn: 'Capercaillie' },
   { key: 'black-grouse', nameFi: 'Teeri', nameEn: 'Black grouse' },

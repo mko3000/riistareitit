@@ -230,9 +230,8 @@ Notes:
   not full ISO timestamps — formatted server-side with UTC getters specifically to avoid
   a local-timezone round-trip shifting the date/time depending on where the server runs.
   See `server/src/routes/sightings.ts`'s `formatDate`/`formatTime`.
-- Basic marker rendering (a colored dot, blue for sighting / red for kill, reusing the
-  app's existing link/error colors) is in `src/sightings/SightingsLayer.tsx`. Per-species
-  icons are `RII-5`, not yet built.
+- Marker rendering: originally a plain colored dot (`RII-22`), replaced by per-species
+  icon badges in `RII-5` — see §6 for the current marker design.
 - `PATCH /sightings/:id` — updates one. Same body shape as `POST` plus `notes`. The edit
   form always sends every field together rather than a sparse diff, so despite the verb
   this behaves as a full replace of the editable fields, not true partial-update
@@ -346,7 +345,29 @@ type ImportedTrack = {
   sighting/kill markers identically on top.
 - Tracks render as polylines.
 - Each sighting/kill renders as a marker: icon = species (`species.icon`), color =
-  sighting vs. kill. Custom (non-preset) species get a fallback icon.
+  sighting vs. kill. Custom (non-preset) species get a fallback icon. Implemented in
+  `RII-5`:
+  - **Shape:** a round badge (28px, white border + drop shadow), anchored at its
+    center — same "the center is the spot" semantics as `RII-22`'s original dot, so
+    existing markings don't visually shift. A white bird silhouette sits inside.
+  - **Color = kind**, on the badge background: blue `#2563eb` for sighting, red
+    `#b00020` for kill (the app's existing link/error colors, unchanged from `RII-22`).
+    Color is the only kind signal — the silhouette is identical for a sighting and a
+    kill of the same species.
+  - **Icon = species**, looked up by `species.icon` in a frontend registry
+    (`src/sightings/speciesIcons.ts`), not by `species.key` — the DB column exists
+    precisely so a species' icon can be reassigned without changing its identity.
+    Registry ids today equal the preset keys (`capercaillie`, `black-grouse`,
+    `hazel-grouse`, `willow-ptarmigan`), as seeded by `RII-20`. Icons are inline SVG
+    path data in that module — no image assets, no icon library, no network requests.
+    Each silhouette leans on the species' most recognizable trait: capercaillie's
+    raised fanned tail, black grouse's lyre-shaped tail, hazel grouse's crest,
+    willow ptarmigan's plump round body.
+  - **Fallback:** a generic bird silhouette, used for custom (free-text) species and
+    for any `species.icon` value the registry doesn't know (e.g. a species row added
+    to the DB before its icon ships) — never a missing/broken marker.
+  - Leaflet `divIcon`s are cached per (icon, kind) pair so re-renders (e.g. a staged
+    `RII-34` move) reuse the same icon object instead of rebuilding marker DOM.
 - Walked-but-empty areas must be visually distinguishable from unwalked areas — this
   is the MVP's core value proposition (see §1), not a Post-MVP nicety. Post-MVP's "fog
   of war" is the fuller version of this; the MVP baseline is "you can see the tracks".
