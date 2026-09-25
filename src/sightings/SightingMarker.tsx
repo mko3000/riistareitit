@@ -22,8 +22,9 @@ interface SightingMarkerProps {
   // RII-34: non-null exactly once, right after SightingsLayer's map click
   // handler picks up the new location for *this* sighting. SightingMarker
   // reopens the popup here (rather than in SightingDetailPopup, which has
-  // no access to the map instance); SightingDetailPopup applies the actual
-  // lat/lng to its own local state from the same prop.
+  // no access to the map instance) and applies the new coordinates to its
+  // own stagedPosition below — see currentPosition's comment for why
+  // SightingDetailPopup doesn't keep its own separate copy of this.
   moveTarget: MoveTarget | null
   onMoveTargetConsumed: () => void
 }
@@ -91,13 +92,19 @@ export function SightingMarker({
     setStagedPosition(null)
   }
 
-  const position: [number, number] = stagedPosition
-    ? [stagedPosition.lat, stagedPosition.lng]
-    : [sighting.lat, sighting.lng]
+  // Single source of truth for "where is this marking right now" — staged
+  // (unsaved) if a move is in progress, the saved position otherwise.
+  // SightingDetailPopup reads this same value directly for its Save
+  // payload rather than keeping its own separately-synced copy: two copies
+  // of "the current position" updated via two different delivery paths is
+  // exactly the kind of setup that drifts out of sync, which is what was
+  // actually happening — Save was sending the *original* lat/lng, not the
+  // staged one, even though the marker itself had already visually moved.
+  const currentPosition = stagedPosition ?? { lat: sighting.lat, lng: sighting.lng }
 
   return (
     <CircleMarker
-      center={position}
+      center={[currentPosition.lat, currentPosition.lng]}
       radius={8}
       pathOptions={{
         color: MARKER_COLOR[sighting.kind],
@@ -114,12 +121,12 @@ export function SightingMarker({
       <Popup ref={popupRef} eventHandlers={{ remove: handleCancelEdit }}>
         <SightingDetailPopup
           sighting={sighting}
+          currentPosition={currentPosition}
           onUpdated={handleUpdated}
           onDeleted={onDeleted}
           onCancelEdit={handleCancelEdit}
           popupRef={popupRef}
           onMove={handleMove}
-          pendingNewLocation={moveTarget}
         />
       </Popup>
     </CircleMarker>

@@ -14,6 +14,14 @@ import { SightingFieldsFieldset, OTHER, type Kind } from './SightingFieldsFields
 
 interface SightingDetailPopupProps {
   sighting: PublicSighting
+  // RII-34: SightingMarker's single source of truth for "where is this
+  // marking right now" — the saved position, or a staged-but-unsaved one
+  // while a move is in progress. Read directly in handleSave rather than
+  // kept as a separately-synced local copy here; two copies of the same
+  // value updated via two different paths is exactly how this drifted out
+  // of sync the first time (marker visually moved, but Save still sent the
+  // original position).
+  currentPosition: { lat: number; lng: number }
   onUpdated: (sighting: PublicSighting) => void
   onDeleted: (id: string) => void
   // react-leaflet 5 has no usePopup() hook — SightingMarker holds the ref
@@ -23,9 +31,6 @@ interface SightingDetailPopupProps {
   // RII-34: tells SightingMarker to close this popup and enter "waiting for
   // a map tap" mode for this sighting.
   onMove: () => void
-  // RII-34: set by SightingMarker once that tap lands, cleared again right
-  // after — a one-shot delivery, not an ongoing "current move target" value.
-  pendingNewLocation: { lat: number; lng: number } | null
   // RII-34: lets SightingMarker snap the marker back to its saved position
   // if an in-progress move is cancelled rather than saved.
   onCancelEdit: () => void
@@ -36,11 +41,11 @@ interface SightingDetailPopupProps {
 // open/closed state to manage here beyond view-vs-edit mode.
 export function SightingDetailPopup({
   sighting,
+  currentPosition,
   onUpdated,
   onDeleted,
   popupRef,
   onMove,
-  pendingNewLocation,
   onCancelEdit,
 }: SightingDetailPopupProps) {
   // react-leaflet renders this component's output into Leaflet's popup via
@@ -58,8 +63,6 @@ export function SightingDetailPopup({
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const [speciesList, setSpeciesList] = useState<Species[]>([])
 
-  const [lat, setLat] = useState(sighting.lat)
-  const [lng, setLng] = useState(sighting.lng)
   const [kind, setKind] = useState<Kind>(sighting.kind)
   const [selectedSpecies, setSelectedSpecies] = useState<string | null>(
     sighting.species?.key ?? (sighting.customSpecies ? OTHER : null),
@@ -82,8 +85,6 @@ export function SightingDetailPopup({
   // edit otherwise.
   function startEditing() {
     getSpecies().then(setSpeciesList)
-    setLat(sighting.lat)
-    setLng(sighting.lng)
     setKind(sighting.kind)
     setSelectedSpecies(sighting.species?.key ?? (sighting.customSpecies ? OTHER : null))
     setCustomSpecies(sighting.customSpecies ?? '')
@@ -95,24 +96,6 @@ export function SightingDetailPopup({
     setFieldErrors({})
     setFormError(null)
     setMode('edit')
-  }
-
-  // RII-34: applies a newly-picked location once SightingMarker delivers
-  // one. This component is never unmounted by the close/reopen that
-  // happens around a move (Leaflet hides/shows the popup imperatively;
-  // React keeps this instance alive), so every other in-progress field
-  // stays exactly as it was — only lat/lng change here.
-  //
-  // Deliberately not a useEffect: this is React's own recommended pattern
-  // for "adjust state when a prop changes" — setState during render,
-  // guarded by tracking the last-applied value in state (not a ref — refs
-  // aren't safe to read/write during render), rather than an effect that
-  // would cause an extra post-commit render pass.
-  const [lastAppliedMove, setLastAppliedMove] = useState<typeof pendingNewLocation>(null)
-  if (pendingNewLocation && pendingNewLocation !== lastAppliedMove) {
-    setLastAppliedMove(pendingNewLocation)
-    setLat(pendingNewLocation.lat)
-    setLng(pendingNewLocation.lng)
   }
 
   const isValid =
@@ -128,8 +111,8 @@ export function SightingDetailPopup({
     setFieldErrors({})
 
     const result = await updateSighting(sighting.id, {
-      lat,
-      lng,
+      lat: currentPosition.lat,
+      lng: currentPosition.lng,
       kind,
       speciesKey: selectedSpecies !== OTHER ? (selectedSpecies ?? undefined) : undefined,
       customSpecies: selectedSpecies === OTHER ? customSpecies.trim() : undefined,
