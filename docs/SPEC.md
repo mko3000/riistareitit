@@ -292,6 +292,13 @@ Notes:
   "waiting for a tap" without changing anything — the popup has no visible cancel button
   during this phase since it's closed, hence the keyboard affordance and a small fixed
   banner ("Tap the map to move this marking (Esc to cancel)") shown while waiting.
+  **The marker itself visually jumps to the tapped location immediately** (`SightingMarker`'s
+  own `stagedPosition` state, separate from `SightingDetailPopup`'s copy used for the
+  eventual `PATCH` body) — the first version left the marker at its old spot until Save,
+  giving zero feedback that a tap had registered at all (reported as "tapping doesn't do
+  anything"); reverts if the edit is cancelled instead of saved (via `onCancelEdit`,
+  wired to both the Cancel button and the popup's `remove` event, so closing via
+  Leaflet's own "×" reverts it too, not just the explicit Cancel button).
   Simplification worth knowing: clicking a *different* marker (not the map itself) while
   waiting doesn't cancel or register as the new location — Leaflet routes that click to
   the other marker's own popup instead, so the "waiting" state just stays pending until

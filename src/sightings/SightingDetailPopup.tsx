@@ -26,6 +26,9 @@ interface SightingDetailPopupProps {
   // RII-34: set by SightingMarker once that tap lands, cleared again right
   // after — a one-shot delivery, not an ongoing "current move target" value.
   pendingNewLocation: { lat: number; lng: number } | null
+  // RII-34: lets SightingMarker snap the marker back to its saved position
+  // if an in-progress move is cancelled rather than saved.
+  onCancelEdit: () => void
 }
 
 // RII-23: rendered as the Popup content nested inside each marker (see
@@ -38,6 +41,7 @@ export function SightingDetailPopup({
   popupRef,
   onMove,
   pendingNewLocation,
+  onCancelEdit,
 }: SightingDetailPopupProps) {
   // react-leaflet renders this component's output into Leaflet's popup via
   // a portal — it doesn't go through Leaflet's own setContent(), which is
@@ -229,7 +233,13 @@ export function SightingDetailPopup({
           </button>
         </div>
         <div className="edit-actions-group">
-          <button type="button" onClick={() => setMode('view')}>
+          <button
+            type="button"
+            onClick={() => {
+              onCancelEdit()
+              setMode('view')
+            }}
+          >
             Cancel
           </button>
           <button type="submit" className="add-button" disabled={!isValid || submitting} aria-label="Save">

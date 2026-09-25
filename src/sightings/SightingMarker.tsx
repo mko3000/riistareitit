@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CircleMarker, Popup, useMap } from 'react-leaflet'
 import type { Popup as LeafletPopup } from 'leaflet'
 import type { PublicSighting } from '../api'
@@ -7,6 +7,11 @@ import { SightingDetailPopup } from './SightingDetailPopup'
 const MARKER_COLOR: Record<PublicSighting['kind'], string> = {
   sighting: '#2563eb', // same blue as .link-button, for visual consistency
   kill: '#b00020', // same red as .field-error/.form-error
+}
+
+interface MoveTarget {
+  lat: number
+  lng: number
 }
 
 interface SightingMarkerProps {
@@ -19,7 +24,7 @@ interface SightingMarkerProps {
   // reopens the popup here (rather than in SightingDetailPopup, which has
   // no access to the map instance); SightingDetailPopup applies the actual
   // lat/lng to its own local state from the same prop.
-  moveTarget: { lat: number; lng: number } | null
+  moveTarget: MoveTarget | null
   onMoveTargetConsumed: () => void
 }
 
@@ -40,10 +45,26 @@ export function SightingMarker({
   const popupRef = useRef<LeafletPopup>(null)
   const map = useMap()
 
-  // Runs once per delivered move: reopens the popup (closed when Move was
-  // clicked, to get it out of the way for the map tap) and immediately
-  // tells the parent the delivery was received, so this doesn't refire on
-  // every subsequent render.
+  // RII-34 UX fix: originally the marker stayed put until Save, so tapping
+  // the map to move it gave zero visible feedback — Miko's report of
+  // "tapping doesn't do anything" was this, not the tap actually being
+  // dropped. The marker now jumps to the tapped spot immediately (still
+  // unsaved; reverts on cancel, confirmed on save) so there's something to
+  // actually see happen.
+  const [stagedPosition, setStagedPosition] = useState<MoveTarget | null>(null)
+
+  // Derived-during-render (not an effect): the same "adjust state when a
+  // prop changes" pattern used in SightingDetailPopup, guarded by state
+  // (not a ref) since refs aren't safe to read/write during render.
+  const [lastAppliedMoveTarget, setLastAppliedMoveTarget] = useState<MoveTarget | null>(null)
+  if (moveTarget && moveTarget !== lastAppliedMoveTarget) {
+    setLastAppliedMoveTarget(moveTarget)
+    setStagedPosition({ lat: moveTarget.lat, lng: moveTarget.lng })
+  }
+
+  // The imperative half (reopening the popup, telling the parent the
+  // delivery was received) stays in an effect — real side effects, not
+  // state derivation, so this doesn't trip the same lint rule.
   useEffect(() => {
     if (moveTarget) {
       popupRef.current?.openOn(map)
@@ -56,9 +77,27 @@ export function SightingMarker({
     onStartMove(sighting.id)
   }
 
+  // Once a save actually lands, `sighting.lat/lng` (from the refreshed
+  // parent array) already matches what was staged — drop the local
+  // override so future renders rely on the authoritative prop again.
+  function handleUpdated(updated: PublicSighting) {
+    setStagedPosition(null)
+    onUpdated(updated)
+  }
+
+  // Cancelling a move without saving must snap the marker back — otherwise
+  // it's left sitting at an unsaved position indefinitely.
+  function handleCancelEdit() {
+    setStagedPosition(null)
+  }
+
+  const position: [number, number] = stagedPosition
+    ? [stagedPosition.lat, stagedPosition.lng]
+    : [sighting.lat, sighting.lng]
+
   return (
     <CircleMarker
-      center={[sighting.lat, sighting.lng]}
+      center={position}
       radius={8}
       pathOptions={{
         color: MARKER_COLOR[sighting.kind],
@@ -66,11 +105,18 @@ export function SightingMarker({
         fillOpacity: 0.9,
       }}
     >
-      <Popup ref={popupRef}>
+      {/* remove fires on any close, including Leaflet's own "×" button —
+          not just our explicit Cancel button — so a staged-but-unsaved
+          move gets reverted no matter how the popup was closed. Also fires
+          from our own popupRef.current?.close() when Move is clicked, but
+          stagedPosition is always still null at that exact point, so
+          clearing it again there is harmless. */}
+      <Popup ref={popupRef} eventHandlers={{ remove: handleCancelEdit }}>
         <SightingDetailPopup
           sighting={sighting}
-          onUpdated={onUpdated}
+          onUpdated={handleUpdated}
           onDeleted={onDeleted}
+          onCancelEdit={handleCancelEdit}
           popupRef={popupRef}
           onMove={handleMove}
           pendingNewLocation={moveTarget}
