@@ -52,6 +52,7 @@ update it before writing code, and commit spec changes alongside code.
 - Keep changes scoped to the issue. Do not opportunistically refactor unrelated code in the same PR.
 - Write or update tests for any behavioural change. If you cannot run the tests, say so explicitly.
 - Conventional commit messages. Reference the Linear issue ID (`RII-N`) in both the commit message and the PR title/body — Linear's status automation only recognizes its own IDs, not GitHub's issue numbers, so a PR without `RII-N` in it won't move the ticket.
+- **Code in English, UI in Finnish** (Miko, 2026-09-25). Identifiers, comments, commit messages, DB values that code matches against (e.g. `species.key`) — all English. Anything a user actually sees — labels, button text, `species.name_fi`, error messages shown in the UI — Finnish, per `RII-7`. Don't pick a Finnish word for a code-facing identifier just because the domain concept is Finnish (e.g. a species' `key` is `'capercaillie'`, not `'metso'` — `name_fi` is where `'Metso'` belongs).
 
 ### Hard boundaries — do NOT touch without an explicit human instruction in the issue
 

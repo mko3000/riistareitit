@@ -15,7 +15,8 @@ docker compose up -d          # starts local Postgres on localhost:5433
 cd server
 cp .env.example .env          # defaults already match docker-compose.yml
 npm install
-npm run prisma:migrate        # applies migrations (none yet beyond the initial no-op)
+npm run prisma:migrate        # applies migrations
+npm run prisma:seed           # seeds preset species (metso, teeri, pyy, riekko)
 ```
 
 Port 5433, not Postgres's usual 5432: on machines that already run a native/system
@@ -43,6 +44,8 @@ curl http://localhost:3001/health
 - `npm run prisma:generate` — regenerate the Prisma client after editing `prisma/schema.prisma`.
 - `npm run prisma:migrate` — create and apply a new migration in development.
 - `npm run prisma:deploy` — apply existing migrations without generating a new one (CI/prod).
+- `npm run prisma:seed` — (re-)seed reference data (currently just preset species). Safe to
+  re-run — uses `upsert`, not `insert`.
 
 ## Environment variables
 
