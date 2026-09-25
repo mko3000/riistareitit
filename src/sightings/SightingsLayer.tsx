@@ -1,25 +1,23 @@
-import { useEffect, useState } from 'react'
-import { CircleMarker, Popup, useMapEvents } from 'react-leaflet'
+import { useEffect, useRef, useState } from 'react'
+import { Popup, useMapEvents } from 'react-leaflet'
+import type { Popup as LeafletPopup } from 'leaflet'
 import { getSightings, type PublicSighting } from '../api'
 import { AddSightingForm } from './AddSightingForm'
+import { SightingMarker } from './SightingMarker'
 
 interface PendingLocation {
   lat: number
   lng: number
 }
 
-const MARKER_COLOR: Record<PublicSighting['kind'], string> = {
-  sighting: '#2563eb', // same blue as .link-button, for visual consistency
-  kill: '#b00020', // same red as .field-error/.form-error
-}
-
-// RII-22. Rendered as a child of <MapContainer> (useMapEvents only works
-// inside the map's own React tree). Markers here are deliberately basic —
-// a colored dot distinguishing sighting vs. kill — per-species icons are
-// RII-5's job, not this ticket's.
+// RII-22/RII-23. Rendered as a child of <MapContainer> (useMapEvents only
+// works inside the map's own React tree). Markers here are deliberately
+// basic — a colored dot distinguishing sighting vs. kill — per-species
+// icons are RII-5's job, not either ticket's.
 export function SightingsLayer() {
   const [sightings, setSightings] = useState<PublicSighting[]>([])
   const [pendingLocation, setPendingLocation] = useState<PendingLocation | null>(null)
+  const addPopupRef = useRef<LeafletPopup>(null)
 
   useEffect(() => {
     getSightings().then(setSightings)
@@ -27,8 +25,10 @@ export function SightingsLayer() {
 
   useMapEvents({
     click(event) {
-      // Ignore taps while a form is already open — avoid silently
-      // relocating the pending add or opening a second one.
+      // Ignore taps while the add form is already open — avoid silently
+      // relocating the pending add or opening a second one. Taps on an
+      // *existing* marker never reach here at all: Leaflet's marker click
+      // handling stops the event from also being seen as a map click.
       if (pendingLocation) return
       setPendingLocation({ lat: event.latlng.lat, lng: event.latlng.lng })
     },
@@ -39,23 +39,23 @@ export function SightingsLayer() {
     setPendingLocation(null)
   }
 
+  function handleUpdated(updated: PublicSighting) {
+    setSightings((current) => current.map((s) => (s.id === updated.id ? updated : s)))
+  }
+
+  function handleDeleted(id: string) {
+    setSightings((current) => current.filter((s) => s.id !== id))
+  }
+
   return (
     <>
       {sightings.map((sighting) => (
-        <CircleMarker
-          key={sighting.id}
-          center={[sighting.lat, sighting.lng]}
-          radius={8}
-          pathOptions={{
-            color: MARKER_COLOR[sighting.kind],
-            fillColor: MARKER_COLOR[sighting.kind],
-            fillOpacity: 0.9,
-          }}
-        />
+        <SightingMarker key={sighting.id} sighting={sighting} onUpdated={handleUpdated} onDeleted={handleDeleted} />
       ))}
 
       {pendingLocation && (
         <Popup
+          ref={addPopupRef}
           position={[pendingLocation.lat, pendingLocation.lng]}
           eventHandlers={{ remove: () => setPendingLocation(null) }}
           // The form's content resizes as fields toggle (e.g. editing the
@@ -66,7 +66,12 @@ export function SightingsLayer() {
           // where the user just tapped).
           autoPan={false}
         >
-          <AddSightingForm lat={pendingLocation.lat} lng={pendingLocation.lng} onCreated={handleCreated} />
+          <AddSightingForm
+            lat={pendingLocation.lat}
+            lng={pendingLocation.lng}
+            onCreated={handleCreated}
+            popupRef={addPopupRef}
+          />
         </Popup>
       )}
     </>

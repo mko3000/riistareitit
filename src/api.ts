@@ -131,20 +131,15 @@ export type CreateSightingResult =
   | { ok: true; sighting: PublicSighting }
   | { ok: false; message: string; fieldErrors?: SightingFieldErrors }
 
-export async function createSighting(input: {
-  lat: number
-  lng: number
-  speciesKey?: string
-  customSpecies?: string
-  kind: 'sighting' | 'kill'
-  personDisplay: string
-  observedDate: string
-  observedTime?: string
-}): Promise<CreateSightingResult> {
+async function sendSightingRequest(
+  method: 'POST' | 'PATCH',
+  path: string,
+  input: unknown,
+): Promise<CreateSightingResult> {
   let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}/sightings`, {
-      method: 'POST',
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify(input),
@@ -163,4 +158,51 @@ export async function createSighting(input: {
   }
 
   return { ok: true, sighting: body.sighting }
+}
+
+export function createSighting(input: {
+  lat: number
+  lng: number
+  speciesKey?: string
+  customSpecies?: string
+  kind: 'sighting' | 'kill'
+  notes?: string
+  personDisplay: string
+  observedDate: string
+  observedTime?: string
+}): Promise<CreateSightingResult> {
+  return sendSightingRequest('POST', '/sightings', input)
+}
+
+// RII-23. lat/lng are deliberately not accepted by the server here — moving
+// a marking is RII-34 (map-tap, not a form field).
+export function updateSighting(
+  id: string,
+  input: {
+    speciesKey?: string
+    customSpecies?: string
+    kind: 'sighting' | 'kill'
+    notes?: string
+    personDisplay: string
+    observedDate: string
+    observedTime?: string
+  },
+): Promise<CreateSightingResult> {
+  return sendSightingRequest('PATCH', `/sightings/${id}`, input)
+}
+
+export async function deleteSighting(id: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}/sightings/${id}`, { method: 'DELETE', credentials: 'include' })
+  } catch {
+    return { ok: false, message: "Couldn't reach the server. Is it running?" }
+  }
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    return { ok: false, message: body?.message ?? 'Could not delete. Please try again.' }
+  }
+
+  return { ok: true }
 }

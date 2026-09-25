@@ -233,6 +233,49 @@ Notes:
 - Basic marker rendering (a colored dot, blue for sighting / red for kill, reusing the
   app's existing link/error colors) is in `src/sightings/SightingsLayer.tsx`. Per-species
   icons are `RII-5`, not yet built.
+- `PATCH /sightings/:id` — updates one. Same body shape as `POST` minus `lat`/`lng`
+  (deliberately not accepted — moving a marking is `RII-34`, a map-tap interaction, not
+  a form field) plus `notes`. The edit form always sends every field together rather
+  than a sparse diff, so despite the verb this behaves as a full replace of the editable
+  fields, not true partial-update semantics — there's only one caller (the edit form)
+  and it always has the complete current state to send back, so reconciling "omitted"
+  vs. "cleared" wasn't worth building. `404` if the id doesn't exist. Implemented in
+  `RII-23`.
+- `DELETE /sightings/:id` — removes the row outright, no soft-delete. `404` if the id
+  doesn't exist. Implemented in `RII-23`.
+- Editing/deleting is unrestricted — any visitor can edit/delete any entry, not just
+  its own creator. Deliberate MVP choice; see `created_by_user_id`'s note earlier in
+  this section for how that could be locked down later, and `RII-33` for the broader
+  visibility/privacy design.
+- **Global error handler** (`server/src/index.ts`): added after `RII-22` manual testing
+  hit a raw Prisma stack trace surfacing directly in the browser (a missing migration —
+  Fastify's default error handler echoes the thrown error's own message verbatim).
+  `app.setErrorHandler(...)` now returns a generic message for any unhandled error,
+  logging the real one server-side. **Must be registered before the route plugins**,
+  not after — confirmed the hard way that a handler set after `app.register(...)` calls
+  doesn't propagate into their encapsulated context and silently does nothing.
+- View/edit/delete UI (`src/sightings/SightingDetailPopup.tsx`) is a Leaflet `Popup`
+  nested inside each marker, rather than manually tracking "which marker is open" —
+  Leaflet opens/closes it natively on marker click. Tapping a marker doesn't also
+  trigger the add-flow's map click handler: Leaflet stops that propagation itself.
+  Shares its field UI with `RII-22`'s add form via `SightingFieldsFieldset.tsx`, adding
+  a trash button. Delete confirmation is a plain `window.confirm()` — the ticket's own
+  words, "a plain 'are you sure?' is enough," matched exactly what that native dialog
+  already does.
+- Notes was initially excluded from the add popup by design (kept the fast add-path
+  minimal), then added there too on Miko's follow-up request 2026-09-25 — optional in
+  both, so it doesn't slow down a quick add if left blank.
+- **react-leaflet Popup content resizing:** react-leaflet renders a `Popup`'s children
+  into Leaflet's content DOM via a React portal, bypassing Leaflet's own `setContent()`
+  — which is what normally tells a popup to recalculate its wrapper size. Neither the
+  add form nor the marker-detail popup resize their white background automatically when
+  their content's size changes (e.g. view → edit mode, or "Other" species revealing a
+  text input) without calling the underlying Leaflet popup's `.update()` manually.
+  react-leaflet 5 has no `usePopup()` hook, so both popups pass a `ref` to their content
+  and call `popupRef.current?.update()` in a dependency-less `useEffect` (i.e. every
+  render). For per-marker popups, the ref has to live in a real component — a ref can't
+  be created inside the `.map()` that renders them — hence `SightingMarker.tsx` existing
+  as its own component rather than being inlined in `SightingsLayer.tsx`.
 
 ## 5. Track import (RII-2 and sub-issues)
 

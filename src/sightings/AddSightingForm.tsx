@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, RefObject } from 'react'
+import type { Popup as LeafletPopup } from 'leaflet'
 import {
   createSighting,
   getMe,
@@ -8,30 +9,36 @@ import {
   type Species,
   type SightingFieldErrors,
 } from '../api'
-import { HALF_HOUR_OPTIONS, nowRoundedTo30Min, todayIsoDate } from './dateTime'
+import { nowRoundedTo30Min, todayIsoDate } from './dateTime'
+import { SightingFieldsFieldset, OTHER, type Kind } from './SightingFieldsFieldset'
 
 interface AddSightingFormProps {
   lat: number
   lng: number
   onCreated: (sighting: PublicSighting) => void
+  // See SightingDetailPopup for why this is needed: react-leaflet portals
+  // content into the popup rather than going through Leaflet's own
+  // setContent(), so nothing tells the popup to resize as fields toggle
+  // (e.g. "Other" species revealing a text input) without calling
+  // popupRef.current.update() ourselves.
+  popupRef: RefObject<LeafletPopup | null>
 }
-
-type Kind = 'sighting' | 'kill'
-
-const OTHER = '__other__' as const
 
 // RII-22: the popup form opened by tapping the map. Rendered inside a
 // Leaflet Popup (see SightingsLayer) — its native close button ("×", top
 // right) is the ticket's cancel action; nothing custom needed for that.
-export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
+// Field rendering itself lives in SightingFieldsFieldset, shared with
+// RII-23's edit mode.
+export function AddSightingForm({ lat, lng, onCreated, popupRef }: AddSightingFormProps) {
   const [speciesList, setSpeciesList] = useState<Species[]>([])
   const [kind, setKind] = useState<Kind>('sighting')
-  const [selectedSpecies, setSelectedSpecies] = useState<string | null>(null) // species key, or OTHER
+  const [selectedSpecies, setSelectedSpecies] = useState<string | null>(null)
   const [customSpecies, setCustomSpecies] = useState('')
   const [personDisplay, setPersonDisplay] = useState('unknown')
   const [editingPerson, setEditingPerson] = useState(false)
   const [date, setDate] = useState(todayIsoDate)
   const [time, setTime] = useState(nowRoundedTo30Min)
+  const [notes, setNotes] = useState('')
   const [fieldErrors, setFieldErrors] = useState<SightingFieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -40,6 +47,10 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
     getSpecies().then(setSpeciesList)
     getMe().then((user) => setPersonDisplay(user?.displayName ?? 'unknown'))
   }, [])
+
+  useEffect(() => {
+    popupRef.current?.update()
+  })
 
   const isValid =
     (selectedSpecies !== null && selectedSpecies !== OTHER) ||
@@ -59,6 +70,7 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
       kind,
       speciesKey: selectedSpecies !== OTHER ? (selectedSpecies ?? undefined) : undefined,
       customSpecies: selectedSpecies === OTHER ? customSpecies.trim() : undefined,
+      notes: notes.trim() || undefined,
       personDisplay,
       observedDate: date,
       observedTime: time,
@@ -81,110 +93,26 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
     // upstream (the map, the popup's own resize/reposition handling) ever
     // sees a click as originating outside the popup.
     <form className="sighting-form" onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()}>
-      <div className="button-row" role="group" aria-label="Type">
-        <button
-          type="button"
-          className={kind === 'sighting' ? 'selected' : ''}
-          onClick={() => setKind('sighting')}
-        >
-          Sighting
-        </button>
-        <button type="button" className={kind === 'kill' ? 'selected' : ''} onClick={() => setKind('kill')}>
-          Kill
-        </button>
-      </div>
-
-      <div className="button-row" role="group" aria-label="Species">
-        {speciesList.map((species) => (
-          <button
-            key={species.key}
-            type="button"
-            className={selectedSpecies === species.key ? 'selected' : ''}
-            onClick={() => setSelectedSpecies(species.key)}
-          >
-            {species.nameFi}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={selectedSpecies === OTHER ? 'selected' : ''}
-          onClick={() => setSelectedSpecies(OTHER)}
-        >
-          Other
-        </button>
-      </div>
-      {selectedSpecies === OTHER && (
-        <input
-          type="text"
-          value={customSpecies}
-          onChange={(e) => setCustomSpecies(e.target.value)}
-          placeholder="Species"
-          aria-label="Custom species"
-        />
-      )}
-      {fieldErrors.species && <p className="field-error">{fieldErrors.species}</p>}
-
-      <div className="person-row">
-        {editingPerson ? (
-          <>
-            <input
-              type="text"
-              value={personDisplay}
-              onChange={(e) => setPersonDisplay(e.target.value)}
-              onKeyDown={(e) => {
-                // Enter confirms and exits edit mode, rather than letting it
-                // fall through to native implicit form submission.
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  setEditingPerson(false)
-                }
-              }}
-              aria-label="Person"
-              autoFocus
-            />
-            {/* Explicit confirm button, not onBlur — onBlur firing at an
-                unexpected moment (e.g. if the popup repositions itself as
-                its content resizes) was the suspected cause of the whole
-                popup appearing to close when editing the name. */}
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => setEditingPerson(false)}
-              aria-label="Done editing person"
-            >
-              ✓
-            </button>
-          </>
-        ) : (
-          <>
-            <span>{personDisplay}</span>
-            <button
-              type="button"
-              className="icon-button"
-              onClick={() => setEditingPerson(true)}
-              aria-label="Edit person"
-            >
-              ✏️
-            </button>
-          </>
-        )}
-      </div>
-
-      <label>
-        Date
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-      </label>
-
-      <label>
-        Time
-        <select value={time} onChange={(e) => setTime(e.target.value)}>
-          {HALF_HOUR_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SightingFieldsFieldset
+        speciesList={speciesList}
+        kind={kind}
+        onKindChange={setKind}
+        selectedSpecies={selectedSpecies}
+        onSelectedSpeciesChange={setSelectedSpecies}
+        customSpecies={customSpecies}
+        onCustomSpeciesChange={setCustomSpecies}
+        personDisplay={personDisplay}
+        onPersonDisplayChange={setPersonDisplay}
+        editingPerson={editingPerson}
+        onEditingPersonChange={setEditingPerson}
+        date={date}
+        onDateChange={setDate}
+        time={time}
+        onTimeChange={setTime}
+        notes={notes}
+        onNotesChange={setNotes}
+        fieldErrors={fieldErrors}
+      />
 
       {formError && <p className="form-error">{formError}</p>}
 
