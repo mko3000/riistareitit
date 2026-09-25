@@ -259,9 +259,12 @@ Notes:
   Leaflet opens/closes it natively on marker click. Tapping a marker doesn't also
   trigger the add-flow's map click handler: Leaflet stops that propagation itself.
   Shares its field UI with `RII-22`'s add form via `SightingFieldsFieldset.tsx`, adding
-  a notes field (which the add popup deliberately excludes) and a trash button. Delete
-  confirmation is a plain `window.confirm()` — the ticket's own words, "a plain 'are you
-  sure?' is enough," matched exactly what that native dialog already does.
+  a trash button. Delete confirmation is a plain `window.confirm()` — the ticket's own
+  words, "a plain 'are you sure?' is enough," matched exactly what that native dialog
+  already does.
+- Notes was initially excluded from the add popup by design (kept the fast add-path
+  minimal), then added there too on Miko's follow-up request 2026-09-25 — optional in
+  both, so it doesn't slow down a quick add if left blank.
 
 ## 5. Track import (RII-2 and sub-issues)
 

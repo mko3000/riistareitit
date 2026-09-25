@@ -30,7 +30,9 @@ interface SightingFieldsFieldsetProps {
   time: string
   onTimeChange: (value: string) => void
   // Undefined (not just empty string) means "don't render a notes field at
-  // all" — RII-22's add popup deliberately excludes it.
+  // all". Both the add popup and edit mode pass it now (optional, can be
+  // left blank in either); kept optional here in case a future caller of
+  // this fieldset genuinely doesn't want it.
   notes?: string
   onNotesChange?: (value: string) => void
   fieldErrors: SightingFieldErrors

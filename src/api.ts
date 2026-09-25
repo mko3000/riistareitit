@@ -166,6 +166,7 @@ export function createSighting(input: {
   speciesKey?: string
   customSpecies?: string
   kind: 'sighting' | 'kill'
+  notes?: string
   personDisplay: string
   observedDate: string
   observedTime?: string

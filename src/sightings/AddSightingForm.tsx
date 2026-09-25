@@ -31,6 +31,7 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
   const [editingPerson, setEditingPerson] = useState(false)
   const [date, setDate] = useState(todayIsoDate)
   const [time, setTime] = useState(nowRoundedTo30Min)
+  const [notes, setNotes] = useState('')
   const [fieldErrors, setFieldErrors] = useState<SightingFieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -58,6 +59,7 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
       kind,
       speciesKey: selectedSpecies !== OTHER ? (selectedSpecies ?? undefined) : undefined,
       customSpecies: selectedSpecies === OTHER ? customSpecies.trim() : undefined,
+      notes: notes.trim() || undefined,
       personDisplay,
       observedDate: date,
       observedTime: time,
@@ -96,6 +98,8 @@ export function AddSightingForm({ lat, lng, onCreated }: AddSightingFormProps) {
         onDateChange={setDate}
         time={time}
         onTimeChange={setTime}
+        notes={notes}
+        onNotesChange={setNotes}
         fieldErrors={fieldErrors}
       />
 
