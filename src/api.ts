@@ -174,11 +174,11 @@ export function createSighting(input: {
   return sendSightingRequest('POST', '/sightings', input)
 }
 
-// RII-23. lat/lng are deliberately not accepted by the server here — moving
-// a marking is RII-34 (map-tap, not a form field).
 export function updateSighting(
   id: string,
   input: {
+    lat: number
+    lng: number
     speciesKey?: string
     customSpecies?: string
     kind: 'sighting' | 'kill'

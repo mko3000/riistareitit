@@ -20,12 +20,25 @@ interface SightingDetailPopupProps {
   // to its own Popup instance and passes it down, since a ref can only be
   // created in a real component, not inside the .map() that renders markers.
   popupRef: RefObject<LeafletPopup | null>
+  // RII-34: tells SightingMarker to close this popup and enter "waiting for
+  // a map tap" mode for this sighting.
+  onMove: () => void
+  // RII-34: set by SightingMarker once that tap lands, cleared again right
+  // after — a one-shot delivery, not an ongoing "current move target" value.
+  pendingNewLocation: { lat: number; lng: number } | null
 }
 
 // RII-23: rendered as the Popup content nested inside each marker (see
 // SightingMarker) — Leaflet opens/closes it natively on marker click, no
 // open/closed state to manage here beyond view-vs-edit mode.
-export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }: SightingDetailPopupProps) {
+export function SightingDetailPopup({
+  sighting,
+  onUpdated,
+  onDeleted,
+  popupRef,
+  onMove,
+  pendingNewLocation,
+}: SightingDetailPopupProps) {
   // react-leaflet renders this component's output into Leaflet's popup via
   // a portal — it doesn't go through Leaflet's own setContent(), which is
   // what normally tells a popup its content size changed. Without this,
@@ -41,6 +54,8 @@ export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const [speciesList, setSpeciesList] = useState<Species[]>([])
 
+  const [lat, setLat] = useState(sighting.lat)
+  const [lng, setLng] = useState(sighting.lng)
   const [kind, setKind] = useState<Kind>(sighting.kind)
   const [selectedSpecies, setSelectedSpecies] = useState<string | null>(
     sighting.species?.key ?? (sighting.customSpecies ? OTHER : null),
@@ -63,6 +78,8 @@ export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }
   // edit otherwise.
   function startEditing() {
     getSpecies().then(setSpeciesList)
+    setLat(sighting.lat)
+    setLng(sighting.lng)
     setKind(sighting.kind)
     setSelectedSpecies(sighting.species?.key ?? (sighting.customSpecies ? OTHER : null))
     setCustomSpecies(sighting.customSpecies ?? '')
@@ -74,6 +91,24 @@ export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }
     setFieldErrors({})
     setFormError(null)
     setMode('edit')
+  }
+
+  // RII-34: applies a newly-picked location once SightingMarker delivers
+  // one. This component is never unmounted by the close/reopen that
+  // happens around a move (Leaflet hides/shows the popup imperatively;
+  // React keeps this instance alive), so every other in-progress field
+  // stays exactly as it was — only lat/lng change here.
+  //
+  // Deliberately not a useEffect: this is React's own recommended pattern
+  // for "adjust state when a prop changes" — setState during render,
+  // guarded by tracking the last-applied value in state (not a ref — refs
+  // aren't safe to read/write during render), rather than an effect that
+  // would cause an extra post-commit render pass.
+  const [lastAppliedMove, setLastAppliedMove] = useState<typeof pendingNewLocation>(null)
+  if (pendingNewLocation && pendingNewLocation !== lastAppliedMove) {
+    setLastAppliedMove(pendingNewLocation)
+    setLat(pendingNewLocation.lat)
+    setLng(pendingNewLocation.lng)
   }
 
   const isValid =
@@ -89,6 +124,8 @@ export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }
     setFieldErrors({})
 
     const result = await updateSighting(sighting.id, {
+      lat,
+      lng,
       kind,
       speciesKey: selectedSpecies !== OTHER ? (selectedSpecies ?? undefined) : undefined,
       customSpecies: selectedSpecies === OTHER ? customSpecies.trim() : undefined,
@@ -177,15 +214,28 @@ export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }
       {formError && <p className="form-error">{formError}</p>}
 
       <div className="edit-actions">
-        <button type="button" className="icon-button" onClick={handleDelete} disabled={deleting} aria-label="Delete">
-          🗑️
-        </button>
-        <button type="button" onClick={() => setMode('view')}>
-          Cancel
-        </button>
-        <button type="submit" className="add-button" disabled={!isValid || submitting} aria-label="Save">
-          ✓
-        </button>
+        <div className="edit-actions-group">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={handleDelete}
+            disabled={deleting}
+            aria-label="Delete"
+          >
+            🗑️
+          </button>
+          <button type="button" onClick={onMove}>
+            Move
+          </button>
+        </div>
+        <div className="edit-actions-group">
+          <button type="button" onClick={() => setMode('view')}>
+            Cancel
+          </button>
+          <button type="submit" className="add-button" disabled={!isValid || submitting} aria-label="Save">
+            ✓
+          </button>
+        </div>
       </div>
     </form>
   )
