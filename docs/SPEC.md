@@ -233,14 +233,15 @@ Notes:
 - Basic marker rendering (a colored dot, blue for sighting / red for kill, reusing the
   app's existing link/error colors) is in `src/sightings/SightingsLayer.tsx`. Per-species
   icons are `RII-5`, not yet built.
-- `PATCH /sightings/:id` — updates one. Same body shape as `POST` minus `lat`/`lng`
-  (deliberately not accepted — moving a marking is `RII-34`, a map-tap interaction, not
-  a form field) plus `notes`. The edit form always sends every field together rather
-  than a sparse diff, so despite the verb this behaves as a full replace of the editable
-  fields, not true partial-update semantics — there's only one caller (the edit form)
-  and it always has the complete current state to send back, so reconciling "omitted"
-  vs. "cleared" wasn't worth building. `404` if the id doesn't exist. Implemented in
-  `RII-23`.
+- `PATCH /sightings/:id` — updates one. Same body shape as `POST` plus `notes`. The edit
+  form always sends every field together rather than a sparse diff, so despite the verb
+  this behaves as a full replace of the editable fields, not true partial-update
+  semantics — there's only one caller (the edit form) and it always has the complete
+  current state to send back, so reconciling "omitted" vs. "cleared" wasn't worth
+  building. `404` if the id doesn't exist. Implemented in `RII-23`; `lat`/`lng` were
+  initially excluded (moving a marking was out of scope — see `RII-34` below) and added
+  once that scope landed, by moving their validation into the same shared
+  `parseCommonFields()` helper `POST` already used, rather than duplicating it.
 - `DELETE /sightings/:id` — removes the row outright, no soft-delete. `404` if the id
   doesn't exist. Implemented in `RII-23`.
 - Editing/deleting is unrestricted — any visitor can edit/delete any entry, not just
@@ -276,6 +277,38 @@ Notes:
   render). For per-marker popups, the ref has to live in a real component — a ref can't
   be created inside the `.map()` that renders them — hence `SightingMarker.tsx` existing
   as its own component rather than being inlined in `SightingsLayer.tsx`.
+- **Move a marking's location** (`RII-34`): edit mode's **Move** button closes the
+  popup (`popupRef.current?.close()`) and tells `SightingsLayer` "waiting for a tap for
+  sighting X" (`movingSightingId`). The next map click delivers `{ sightingId, lat, lng
+  }` as a one-shot `pendingMoveTarget`, filtered down to the matching `SightingMarker`,
+  which reopens the popup (`popupRef.current?.openOn(map)`, needs `useMap()`) and stores
+  the new coordinates as its own `stagedPosition` — not persisted until the existing
+  **Save** button is pressed (staged, not immediate; see the ticket's own open question
+  — this was the assumption made there). Every other in-progress field edit survives
+  automatically: this whole close/reopen cycle never unmounts the `SightingDetailPopup`
+  React component (Leaflet's `.close()`/`.openOn()` only hide/show the DOM; react-leaflet
+  keeps the component instance alive throughout), so nothing needed to be explicitly
+  carried across the move. Escape cancels "waiting for a tap" without changing anything
+  — the popup has no visible cancel button during this phase since it's closed, hence
+  the keyboard affordance and a small fixed banner ("Tap the map to move this marking
+  (Esc to cancel)") shown while waiting.
+  **`SightingMarker`'s `stagedPosition` (staged, or the saved position if no move is in
+  progress) is the single source of truth for "where is this marking right now,"** read
+  directly by `SightingDetailPopup` via a `currentPosition` prop for both the marker's
+  visual position *and* the `PATCH` body on save. Went through two broken versions before
+  landing here: first the marker didn't move at all until Save (zero feedback that a tap
+  had registered — reported as "tapping doesn't do anything"); then, after fixing that
+  by giving `SightingDetailPopup` its *own* separately-synced `lat`/`lng` copy, the two
+  copies drifted apart — the marker visually moved but Save still sent the original,
+  pre-move position (reported as "saving returns it to the old spot"). One prop, read
+  directly at save time, removed the possibility of the two disagreeing at all.
+  `stagedPosition` reverts on cancel — wired to both the Cancel button and the popup's
+  `remove` event, so closing via Leaflet's own "×" reverts it too, not just the explicit
+  Cancel button.
+  Simplification worth knowing: clicking a *different* marker (not the map itself) while
+  waiting doesn't cancel or register as the new location — Leaflet routes that click to
+  the other marker's own popup instead, so the "waiting" state just stays pending until
+  an actual bare-map tap occurs.
 
 ## 5. Track import (RII-2 and sub-issues)
 

@@ -14,18 +14,40 @@ import { SightingFieldsFieldset, OTHER, type Kind } from './SightingFieldsFields
 
 interface SightingDetailPopupProps {
   sighting: PublicSighting
+  // RII-34: SightingMarker's single source of truth for "where is this
+  // marking right now" — the saved position, or a staged-but-unsaved one
+  // while a move is in progress. Read directly in handleSave rather than
+  // kept as a separately-synced local copy here; two copies of the same
+  // value updated via two different paths is exactly how this drifted out
+  // of sync the first time (marker visually moved, but Save still sent the
+  // original position).
+  currentPosition: { lat: number; lng: number }
   onUpdated: (sighting: PublicSighting) => void
   onDeleted: (id: string) => void
   // react-leaflet 5 has no usePopup() hook — SightingMarker holds the ref
   // to its own Popup instance and passes it down, since a ref can only be
   // created in a real component, not inside the .map() that renders markers.
   popupRef: RefObject<LeafletPopup | null>
+  // RII-34: tells SightingMarker to close this popup and enter "waiting for
+  // a map tap" mode for this sighting.
+  onMove: () => void
+  // RII-34: lets SightingMarker snap the marker back to its saved position
+  // if an in-progress move is cancelled rather than saved.
+  onCancelEdit: () => void
 }
 
 // RII-23: rendered as the Popup content nested inside each marker (see
 // SightingMarker) — Leaflet opens/closes it natively on marker click, no
 // open/closed state to manage here beyond view-vs-edit mode.
-export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }: SightingDetailPopupProps) {
+export function SightingDetailPopup({
+  sighting,
+  currentPosition,
+  onUpdated,
+  onDeleted,
+  popupRef,
+  onMove,
+  onCancelEdit,
+}: SightingDetailPopupProps) {
   // react-leaflet renders this component's output into Leaflet's popup via
   // a portal — it doesn't go through Leaflet's own setContent(), which is
   // what normally tells a popup its content size changed. Without this,
@@ -89,6 +111,8 @@ export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }
     setFieldErrors({})
 
     const result = await updateSighting(sighting.id, {
+      lat: currentPosition.lat,
+      lng: currentPosition.lng,
       kind,
       speciesKey: selectedSpecies !== OTHER ? (selectedSpecies ?? undefined) : undefined,
       customSpecies: selectedSpecies === OTHER ? customSpecies.trim() : undefined,
@@ -177,15 +201,34 @@ export function SightingDetailPopup({ sighting, onUpdated, onDeleted, popupRef }
       {formError && <p className="form-error">{formError}</p>}
 
       <div className="edit-actions">
-        <button type="button" className="icon-button" onClick={handleDelete} disabled={deleting} aria-label="Delete">
-          🗑️
-        </button>
-        <button type="button" onClick={() => setMode('view')}>
-          Cancel
-        </button>
-        <button type="submit" className="add-button" disabled={!isValid || submitting} aria-label="Save">
-          ✓
-        </button>
+        <div className="edit-actions-group">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={handleDelete}
+            disabled={deleting}
+            aria-label="Delete"
+          >
+            🗑️
+          </button>
+          <button type="button" onClick={onMove}>
+            Move
+          </button>
+        </div>
+        <div className="edit-actions-group">
+          <button
+            type="button"
+            onClick={() => {
+              onCancelEdit()
+              setMode('view')
+            }}
+          >
+            Cancel
+          </button>
+          <button type="submit" className="add-button" disabled={!isValid || submitting} aria-label="Save">
+            ✓
+          </button>
+        </div>
       </div>
     </form>
   )

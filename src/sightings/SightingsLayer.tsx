@@ -10,21 +10,53 @@ interface PendingLocation {
   lng: number
 }
 
-// RII-22/RII-23. Rendered as a child of <MapContainer> (useMapEvents only
-// works inside the map's own React tree). Markers here are deliberately
-// basic — a colored dot distinguishing sighting vs. kill — per-species
-// icons are RII-5's job, not either ticket's.
+interface PendingMoveTarget {
+  sightingId: string
+  lat: number
+  lng: number
+}
+
+// RII-22/RII-23/RII-34. Rendered as a child of <MapContainer> (useMapEvents
+// only works inside the map's own React tree). Markers here are
+// deliberately basic — a colored dot distinguishing sighting vs. kill —
+// per-species icons are RII-5's job, not any of these tickets'.
 export function SightingsLayer() {
   const [sightings, setSightings] = useState<PublicSighting[]>([])
   const [pendingLocation, setPendingLocation] = useState<PendingLocation | null>(null)
   const addPopupRef = useRef<LeafletPopup>(null)
 
+  // RII-34: which sighting (if any) is waiting for its next map tap to
+  // become its new location, and — once that tap lands — the one-shot
+  // delivery of where. Two separate pieces of state rather than one,
+  // because "waiting" needs to survive across renders until a tap occurs,
+  // while "delivered" needs to reset back to null immediately after
+  // SightingMarker consumes it (see its own comment on this).
+  const [movingSightingId, setMovingSightingId] = useState<string | null>(null)
+  const [pendingMoveTarget, setPendingMoveTarget] = useState<PendingMoveTarget | null>(null)
+
   useEffect(() => {
     getSightings().then(setSightings)
   }, [])
 
+  // RII-34: Escape backs out of "pick a new location" mode without
+  // changing anything — the popup was already closed when Move was
+  // clicked, so there's no visible cancel button to offer otherwise.
+  useEffect(() => {
+    if (!movingSightingId) return
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMovingSightingId(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [movingSightingId])
+
   useMapEvents({
     click(event) {
+      if (movingSightingId) {
+        setPendingMoveTarget({ sightingId: movingSightingId, lat: event.latlng.lat, lng: event.latlng.lng })
+        setMovingSightingId(null)
+        return
+      }
       // Ignore taps while the add form is already open — avoid silently
       // relocating the pending add or opening a second one. Taps on an
       // *existing* marker never reach here at all: Leaflet's marker click
@@ -49,8 +81,20 @@ export function SightingsLayer() {
 
   return (
     <>
+      {movingSightingId && (
+        <div className="move-banner">Tap the map to move this marking (Esc to cancel)</div>
+      )}
+
       {sightings.map((sighting) => (
-        <SightingMarker key={sighting.id} sighting={sighting} onUpdated={handleUpdated} onDeleted={handleDeleted} />
+        <SightingMarker
+          key={sighting.id}
+          sighting={sighting}
+          onUpdated={handleUpdated}
+          onDeleted={handleDeleted}
+          onStartMove={setMovingSightingId}
+          moveTarget={pendingMoveTarget?.sightingId === sighting.id ? pendingMoveTarget : null}
+          onMoveTargetConsumed={() => setPendingMoveTarget(null)}
+        />
       ))}
 
       {pendingLocation && (
