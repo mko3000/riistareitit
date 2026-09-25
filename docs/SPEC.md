@@ -260,6 +260,13 @@ it only attributes data to a real name instead of "unknown" once you have one.
 - `GET /me` — `200` always, with `{ user: null }` when anonymous rather than `401`:
   being logged out is this endpoint's normal case (login is optional app-wide), not
   an error every page load has to branch on. Implemented in `RII-30`.
+- **UI:** a persistent top bar (`src/auth/AuthBar.tsx`) owns all of this on the
+  frontend — checks `/me` on mount, shows Log in/Sign up buttons (opening a small
+  dropdown with the relevant form) when anonymous, or the display name + a Log out
+  button when signed in. The page layout is now bar-on-top + map filling the rest of
+  the viewport (`.app-shell`/`.top-nav`/`.map-area` in `src/index.css`), replacing
+  `RII-26`'s original full-viewport-map-only layout. Implemented in `RII-31`; this
+  is the epic's (`RII-8`) last piece.
 
 ### Still deferred (Post-MVP)
 
