@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { deleteTrack, type PublicTrack, type PublicUser } from '../api'
 import { formatFinnishDate, formatKm } from './format'
 import { trackDistanceM } from './trackStats'
+import { t } from '../i18n'
 
 interface SavedTrackPopupProps {
   track: PublicTrack
@@ -27,7 +28,7 @@ export function SavedTrackPopup({ track, user, onDeleted }: SavedTrackPopupProps
 
   async function handleDelete() {
     // Same pattern as sightings: the native confirm() says exactly what's needed.
-    if (!window.confirm(`Poistetaanko reitti "${track.name}"? Tätä ei voi perua.`)) return
+    if (!window.confirm(t.tracks.confirmDelete(track.name))) return
     setDeleting(true)
     setError(null)
     const result = await deleteTrack(track.id)
@@ -46,10 +47,10 @@ export function SavedTrackPopup({ track, user, onDeleted }: SavedTrackPopupProps
         {track.recordedDate && `${formatFinnishDate(track.recordedDate)} · `}
         {formatKm(distanceM)}
       </p>
-      <p>Tuonut: {track.owner?.displayName ?? 'tuntematon'}</p>
+      <p>{t.tracks.importedBy(track.owner?.displayName ?? t.tracks.unknownImporter)}</p>
       {isOwn && (
         <button type="button" onClick={handleDelete} disabled={deleting}>
-          {deleting ? 'Poistetaan…' : 'Poista reitti'}
+          {deleting ? t.tracks.deleting : t.tracks.deleteTrack}
         </button>
       )}
       {error && <p className="form-error">{error}</p>}

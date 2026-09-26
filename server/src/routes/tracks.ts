@@ -36,40 +36,45 @@ interface ValidTrack {
 
 type TrackWithOwner = Track & { owner: { id: string; displayName: string } | null }
 
-const INVALID = (message: string) => ({ ok: false as const, message })
+// `message` is English and developer-facing — the client shows its own
+// Finnish text chosen by `error` code (docs/SPEC.md §7).
+const INVALID = (message: string, error = 'invalid_input') => ({ ok: false as const, error, message })
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
 
-// One Finnish message rather than per-field errors: there's no form on the
-// client to attach them to, and a well-behaved client never trips these.
-function parseTrackBody(body: TrackBody): { ok: true; track: ValidTrack } | { ok: false; message: string } {
+// One message rather than per-field errors: there's no form on the client to
+// attach them to, and a well-behaved client never trips these. The one a
+// real user can hit (too many points) gets its own error code.
+function parseTrackBody(
+  body: TrackBody,
+): { ok: true; track: ValidTrack } | { ok: false; error: string; message: string } {
   const name = typeof body.name === 'string' ? body.name.trim() : ''
-  if (!name || name.length > MAX_NAME_LENGTH) return INVALID('Reitin nimi puuttuu tai on liian pitkä.')
+  if (!name || name.length > MAX_NAME_LENGTH) return INVALID('Track name is missing or too long.')
 
   const sourceFormat = typeof body.sourceFormat === 'string' ? body.sourceFormat : ''
-  if (!VALID_SOURCE_FORMATS.has(sourceFormat)) return INVALID('Tuntematon tiedostomuoto.')
+  if (!VALID_SOURCE_FORMATS.has(sourceFormat)) return INVALID('Unknown source format.')
 
   let recordedDate: Date | null = null
   if (body.recordedDate !== undefined && body.recordedDate !== null) {
     if (typeof body.recordedDate !== 'string' || !DATE_RE.test(body.recordedDate)) {
-      return INVALID('Reitin päivämäärä on virheellinen.')
+      return INVALID('Invalid recorded date.')
     }
     recordedDate = new Date(`${body.recordedDate}T00:00:00Z`)
-    if (Number.isNaN(recordedDate.getTime())) return INVALID('Reitin päivämäärä on virheellinen.')
+    if (Number.isNaN(recordedDate.getTime())) return INVALID('Invalid recorded date.')
   }
 
-  if (!Array.isArray(body.segments) || body.segments.length === 0) return INVALID('Reitissä ei ole pisteitä.')
+  if (!Array.isArray(body.segments) || body.segments.length === 0) return INVALID('Track has no points.')
 
   const segments: StoredSegments = []
   let pointCount = 0
   for (const segment of body.segments) {
-    if (!Array.isArray(segment) || segment.length === 0) return INVALID('Reitin tiedot ovat virheelliset.')
+    if (!Array.isArray(segment) || segment.length === 0) return INVALID('Invalid track data.')
     const stored: StoredPoint[] = []
     for (const raw of segment) {
       if (++pointCount > MAX_POINTS) {
-        return INVALID(`Reitissä on liikaa pisteitä (enintään ${MAX_POINTS.toLocaleString('fi-FI')}).`)
+        return INVALID(`Track has more than ${MAX_POINTS} points.`, 'too_many_points')
       }
       const point = raw as { lat?: unknown; lng?: unknown; elevationM?: unknown; recordedAt?: unknown } | null
       if (
@@ -81,15 +86,15 @@ function parseTrackBody(body: TrackBody): { ok: true; track: ValidTrack } | { ok
         point.lng < -180 ||
         point.lng > 180
       ) {
-        return INVALID('Reitissä on virheellisiä sijainteja.')
+        return INVALID('Track has invalid coordinates.')
       }
       if (point.elevationM !== undefined && !isFiniteNumber(point.elevationM)) {
-        return INVALID('Reitin tiedot ovat virheelliset.')
+        return INVALID('Invalid track data.')
       }
       let recordedAtMs: number | null = null
       if (point.recordedAt !== undefined) {
         recordedAtMs = typeof point.recordedAt === 'string' ? Date.parse(point.recordedAt) : Number.NaN
-        if (Number.isNaN(recordedAtMs)) return INVALID('Reitin tiedot ovat virheelliset.')
+        if (Number.isNaN(recordedAtMs)) return INVALID('Invalid track data.')
       }
       const elevationM = point.elevationM ?? null
       stored.push(
@@ -124,7 +129,7 @@ function toPublicTrack(track: TrackWithOwner) {
 async function requireUser(request: FastifyRequest, reply: FastifyReply): Promise<User | null> {
   const user = await getSessionUser(request)
   if (!user) {
-    await reply.status(401).send({ error: 'not_logged_in', message: 'Kirjaudu sisään nähdäksesi ja lisätäksesi reittejä.' })
+    await reply.status(401).send({ error: 'not_logged_in', message: 'Log in to view and add tracks.' })
     return null
   }
   return user
@@ -148,7 +153,7 @@ export default async function tracksRoutes(app: FastifyInstance) {
     if (!user) return reply
 
     const parsed = parseTrackBody((request.body ?? {}) as TrackBody)
-    if (!parsed.ok) return reply.status(400).send({ error: 'invalid_input', message: parsed.message })
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error, message: parsed.message })
     const { name, sourceFormat, recordedDate, segments } = parsed.track
 
     const track = await prisma.track.create({
@@ -169,9 +174,9 @@ export default async function tracksRoutes(app: FastifyInstance) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) return null
       throw err
     })
-    if (!track) return reply.status(404).send({ error: 'not_found', message: 'Reittiä ei enää ole.' })
+    if (!track) return reply.status(404).send({ error: 'not_found', message: 'Track not found.' })
     if (track.ownerUserId !== user.id) {
-      return reply.status(403).send({ error: 'forbidden', message: 'Voit poistaa vain omia reittejäsi.' })
+      return reply.status(403).send({ error: 'forbidden', message: 'Only the track owner can delete it.' })
     }
 
     await prisma.track.delete({ where: { id } })

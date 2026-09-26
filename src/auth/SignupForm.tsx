@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { signUp, type PublicUser, type SignUpFieldErrors } from '../api'
+import { t } from '../i18n'
 
 interface SignupFormProps {
   onSignedUp: (user: PublicUser) => void
@@ -38,9 +39,9 @@ export function SignupForm({ onSignedUp, onSwitchToLogin }: SignupFormProps) {
 
   return (
     <form className="signup-form" onSubmit={handleSubmit}>
-      <h2>Sign up</h2>
+      <h2>{t.auth.signUp}</h2>
 
-      <label htmlFor="signup-email">Email</label>
+      <label htmlFor="signup-email">{t.auth.email}</label>
       <input
         id="signup-email"
         type="email"
@@ -51,7 +52,7 @@ export function SignupForm({ onSignedUp, onSwitchToLogin }: SignupFormProps) {
       />
       {fieldErrors.email && <p className="field-error">{fieldErrors.email}</p>}
 
-      <label htmlFor="signup-display-name">Display name</label>
+      <label htmlFor="signup-display-name">{t.auth.displayName}</label>
       <input
         id="signup-display-name"
         type="text"
@@ -62,7 +63,7 @@ export function SignupForm({ onSignedUp, onSwitchToLogin }: SignupFormProps) {
       />
       {fieldErrors.displayName && <p className="field-error">{fieldErrors.displayName}</p>}
 
-      <label htmlFor="signup-password">Password</label>
+      <label htmlFor="signup-password">{t.auth.password}</label>
       <input
         id="signup-password"
         type="password"
@@ -76,11 +77,11 @@ export function SignupForm({ onSignedUp, onSwitchToLogin }: SignupFormProps) {
       {formError && <p className="form-error">{formError}</p>}
 
       <button type="submit" disabled={submitting}>
-        {submitting ? 'Signing up…' : 'Sign up'}
+        {submitting ? t.auth.signingUp : t.auth.signUp}
       </button>
 
       <button type="button" className="link-button" onClick={onSwitchToLogin}>
-        Already have an account? Log in
+        {t.auth.switchToLogIn}
       </button>
     </form>
   )

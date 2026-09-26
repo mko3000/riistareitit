@@ -1,6 +1,24 @@
+import { t } from './i18n'
 import type { ImportedTrack, TrackSourceFormat } from './tracks/types'
 
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
+
+// RII-7: the UI never shows the server's own `message` (English, for
+// developers). User-facing text is picked here from the response's `error`
+// code, and for `invalid_input` from which fields are in `fieldErrors`.
+// See docs/SPEC.md §7.
+function localizeFieldErrors<K extends string>(
+  serverFieldErrors: unknown,
+  messages: Record<K, string>,
+): Partial<Record<K, string>> {
+  const localized: Partial<Record<K, string>> = {}
+  if (serverFieldErrors && typeof serverFieldErrors === 'object') {
+    for (const field of Object.keys(serverFieldErrors)) {
+      if (field in messages) localized[field as K] = messages[field as K]
+    }
+  }
+  return localized
+}
 
 export interface PublicUser {
   id: string
@@ -28,20 +46,26 @@ async function postJson(path: string, body: unknown): Promise<AuthResult> {
       body: JSON.stringify(body),
     })
   } catch {
-    return { ok: false, message: "Couldn't reach the server. Is it running?" }
+    return { ok: false, message: t.common.serverUnreachable }
   }
 
   const responseBody = await response.json().catch(() => null)
 
   if (!response.ok) {
-    if (responseBody?.error === 'invalid_input') {
-      return {
-        ok: false,
-        message: 'Please fix the errors below.',
-        fieldErrors: responseBody.fieldErrors,
-      }
+    switch (responseBody?.error) {
+      case 'invalid_input':
+        return {
+          ok: false,
+          message: t.common.fixErrorsBelow,
+          fieldErrors: localizeFieldErrors(responseBody.fieldErrors, t.auth.errors.fields),
+        }
+      case 'email_taken':
+        return { ok: false, message: t.auth.errors.emailTaken }
+      case 'invalid_credentials':
+        return { ok: false, message: t.auth.errors.invalidCredentials }
+      default:
+        return { ok: false, message: t.common.genericError }
     }
-    return { ok: false, message: responseBody?.message ?? 'Something went wrong. Please try again.' }
   }
 
   return { ok: true, user: responseBody.user }
@@ -147,16 +171,24 @@ async function sendSightingRequest(
       body: JSON.stringify(input),
     })
   } catch {
-    return { ok: false, message: "Couldn't reach the server. Is it running?" }
+    return { ok: false, message: t.common.serverUnreachable }
   }
 
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    if (body?.error === 'invalid_input') {
-      return { ok: false, message: 'Please fix the errors below.', fieldErrors: body.fieldErrors }
+    switch (body?.error) {
+      case 'invalid_input':
+        return {
+          ok: false,
+          message: t.common.fixErrorsBelow,
+          fieldErrors: localizeFieldErrors(body.fieldErrors, t.sightings.errors.fields),
+        }
+      case 'not_found':
+        return { ok: false, message: t.sightings.errors.notFound }
+      default:
+        return { ok: false, message: t.sightings.errors.saveFailed }
     }
-    return { ok: false, message: body?.message ?? 'Could not save. Please try again.' }
   }
 
   return { ok: true, sighting: body.sighting }
@@ -198,12 +230,15 @@ export async function deleteSighting(id: string): Promise<{ ok: true } | { ok: f
   try {
     response = await fetch(`${API_BASE_URL}/sightings/${id}`, { method: 'DELETE', credentials: 'include' })
   } catch {
-    return { ok: false, message: "Couldn't reach the server. Is it running?" }
+    return { ok: false, message: t.common.serverUnreachable }
   }
 
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    return { ok: false, message: body?.message ?? 'Could not delete. Please try again.' }
+    return {
+      ok: false,
+      message: body?.error === 'not_found' ? t.sightings.errors.notFound : t.sightings.errors.deleteFailed,
+    }
   }
 
   return { ok: true }
@@ -245,13 +280,23 @@ export async function createTrack(track: ImportedTrack & { name: string }): Prom
       body: JSON.stringify(track),
     })
   } catch {
-    return { ok: false, message: 'Palvelimeen ei saatu yhteyttä.' }
+    return { ok: false, message: t.common.serverUnreachable }
   }
 
   const body = await response.json().catch(() => null)
   if (!response.ok) {
-    if (response.status === 413) return { ok: false, message: 'Reitti on liian suuri tallennettavaksi.' }
-    return { ok: false, message: body?.message ?? 'Tallennus epäonnistui. Yritä uudelleen.' }
+    // 413 is Fastify's own body-limit rejection, before the route runs.
+    if (response.status === 413 || body?.error === 'too_many_points') {
+      return { ok: false, message: t.tracks.errors.tooLarge }
+    }
+    switch (body?.error) {
+      case 'not_logged_in':
+        return { ok: false, message: t.tracks.errors.notLoggedIn }
+      case 'invalid_input':
+        return { ok: false, message: t.tracks.errors.invalidTrack }
+      default:
+        return { ok: false, message: t.tracks.errors.saveFailed }
+    }
   }
   return { ok: true, track: body.track }
 }
@@ -261,11 +306,16 @@ export async function deleteTrack(id: string): Promise<{ ok: true } | { ok: fals
   try {
     response = await fetch(`${API_BASE_URL}/tracks/${id}`, { method: 'DELETE', credentials: 'include' })
   } catch {
-    return { ok: false, message: 'Palvelimeen ei saatu yhteyttä.' }
+    return { ok: false, message: t.common.serverUnreachable }
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    return { ok: false, message: body?.message ?? 'Poisto epäonnistui. Yritä uudelleen.' }
+    const messages: Record<string, string> = {
+      not_logged_in: t.tracks.errors.notLoggedIn,
+      forbidden: t.tracks.errors.forbidden,
+      not_found: t.tracks.errors.notFound,
+    }
+    return { ok: false, message: messages[body?.error] ?? t.tracks.errors.deleteFailed }
   }
   return { ok: true }
 }

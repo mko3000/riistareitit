@@ -11,6 +11,7 @@ import {
 } from '../api'
 import { nowRoundedTo30Min, todayIsoDate } from './dateTime'
 import { SightingFieldsFieldset, OTHER, type Kind } from './SightingFieldsFieldset'
+import { t } from '../i18n'
 
 interface AddSightingFormProps {
   lat: number
@@ -116,7 +117,7 @@ export function AddSightingForm({ lat, lng, onCreated, popupRef }: AddSightingFo
 
       {formError && <p className="form-error">{formError}</p>}
 
-      <button type="submit" className="add-button" disabled={!isValid || submitting} aria-label="Add">
+      <button type="submit" className="add-button" disabled={!isValid || submitting} aria-label={t.sightings.add}>
         {submitting ? '…' : '+'}
       </button>
     </form>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { logout, type PublicUser } from '../api'
 import { SignupForm } from './SignupForm'
 import { LoginForm } from './LoginForm'
+import { t } from '../i18n'
 
 type AuthView = 'signup' | 'login' | null
 
@@ -35,17 +36,17 @@ export function AuthBar({ user, checkingSession, onUserChange, controlsSlotRef }
 
   return (
     <header className="top-nav">
-      <span className="app-name">Riistareitit</span>
+      <span className="app-name">{t.common.appName}</span>
       <div ref={controlsSlotRef} className="bar-controls"></div>
 
       <div className="auth-controls">
         {checkingSession ? (
-          <span>Checking session…</span>
+          <span>{t.auth.checkingSession}</span>
         ) : user ? (
           <>
-            <span>Signed in as {user.displayName}</span>
+            <span>{t.auth.signedInAs(user.displayName)}</span>
             <button type="button" onClick={handleLogout}>
-              Log out
+              {t.auth.logOut}
             </button>
           </>
         ) : (
@@ -54,7 +55,7 @@ export function AuthBar({ user, checkingSession, onUserChange, controlsSlotRef }
               type="button"
               onClick={() => setAuthView((current) => (current === 'login' ? null : 'login'))}
             >
-              Log in
+              {t.auth.logIn}
             </button>
           </>
         )}

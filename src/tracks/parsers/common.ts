@@ -1,7 +1,9 @@
 import type { ImportedTrack, TrackPoint, TrackSourceFormat } from '../types'
+import { t } from '../../i18n'
 
-// Thrown for anything wrong with the *file*. `message` is Finnish and shown
-// to the user as-is; any other error escaping a parser is a bug.
+// Thrown for anything wrong with the *file*. `message` is the user-facing
+// text (from src/i18n) and shown as-is; any other error escaping a parser is
+// a bug.
 export class TrackParseError extends Error {
   constructor(message: string) {
     super(message)
@@ -9,16 +11,11 @@ export class TrackParseError extends Error {
   }
 }
 
-export function invalidFileMessage(formatLabel: string): string {
-  return `Tiedostoa ei voitu lukea – se ei ole kelvollinen ${formatLabel}-tiedosto.`
-}
-
-export const NO_LOCATION_MESSAGE = 'Tiedostossa ei ole sijaintitietoja.'
 
 export function parseXml(text: string, formatLabel: string, expectedRootName: string): Document {
   const doc = new DOMParser().parseFromString(text, 'application/xml')
   if (doc.getElementsByTagName('parsererror').length > 0 || doc.documentElement.localName !== expectedRootName) {
-    throw new TrackParseError(invalidFileMessage(formatLabel))
+    throw new TrackParseError(t.tracks.errors.invalidFile(formatLabel))
   }
   return doc
 }
@@ -80,7 +77,7 @@ export function buildTrack(input: {
   const segments = input.segments
     .map((segment) => segment.filter((point): point is TrackPoint => point !== null))
     .filter((segment) => segment.length > 0)
-  if (segments.length === 0) throw new TrackParseError(NO_LOCATION_MESSAGE)
+  if (segments.length === 0) throw new TrackParseError(t.tracks.errors.noLocation)
 
   const track: ImportedTrack = { sourceFormat: input.sourceFormat, segments }
   const name = input.name?.trim()
