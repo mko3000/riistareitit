@@ -8,15 +8,18 @@ const MINIMAL_TCX = `<TrainingCenterDatabase><Activities><Activity><Lap><Track><
 
 const MINIMAL_GPX = `<gpx version="1.1"><trk><trkseg><trkpt lat="60.1" lon="24.9"/></trkseg></trk></gpx>`
 
+const MINIMAL_KML = `<kml><Placemark><LineString><coordinates>24.9,60.1</coordinates></LineString></Placemark></kml>`
+
 describe('parseTrackFile', () => {
   it('picks the parser by extension, case-insensitively', () => {
     expect(parseTrackFile('walk.TCX', MINIMAL_TCX).sourceFormat).toBe('tcx')
     expect(parseTrackFile('walk.gpx', MINIMAL_GPX).sourceFormat).toBe('gpx')
+    expect(parseTrackFile('walk.Kml', MINIMAL_KML).sourceFormat).toBe('kml')
   })
 
   it('rejects unsupported extensions with a Finnish message naming the file', () => {
     expect(() => parseTrackFile('photo.jpg', '')).toThrow(
-      new TrackParseError('Tiedostomuotoa ei tueta (photo.jpg). Tuetut muodot: TCX, GPX.'),
+      new TrackParseError('Tiedostomuotoa ei tueta (photo.jpg). Tuetut muodot: TCX, GPX, KML.'),
     )
     expect(() => parseTrackFile('no-extension', '')).toThrow(TrackParseError)
   })
