@@ -108,10 +108,12 @@ model Sighting {
 }
 
 // RII-3. Imported walking routes (parsed client-side from TCX/GPX/KML, see
-// docs/SPEC.md §5). The original file is never stored — only these points.
-// Import requires login, so ownerUserId is always set on create; nullable +
-// SET NULL mirrors sightings until RII-33 decides what happens to a deleted
-// account's tracks. Visibility is global for logged-in users for now (RII-33).
+// docs/SPEC.md §5). The original file is never stored — only the points, all
+// of them in `segments` as one JSONB value (format and reasoning: SPEC.md §4
+// "Track geometry storage"). Import requires login, so ownerUserId is always
+// set on create; nullable + SET NULL mirrors sightings until RII-33 decides
+// what happens to a deleted account's tracks. Visibility is global for
+// logged-in users for now (RII-33).
 model Track {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name         String
@@ -120,26 +122,7 @@ model Track {
   owner        User?     @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
   importedAt   DateTime  @default(now()) @map("imported_at") @db.Timestamptz
   recordedDate DateTime? @map("recorded_date") @db.Date
-
-  points TrackPoint[]
+  segments     Json      @db.JsonB
 
   @@map("tracks")
-}
-
-// RII-3. One row per point. `sequence` orders points across the whole track;
-// `segment` splits it at recording pauses so the map doesn't draw a line
-// across the gap.
-model TrackPoint {
-  id         BigInt    @id @default(autoincrement())
-  trackId    String    @map("track_id") @db.Uuid
-  track      Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
-  sequence   Int
-  segment    Int       @default(0)
-  lat        Float
-  lng        Float
-  elevationM Float?    @map("elevation_m")
-  recordedAt DateTime? @map("recorded_at") @db.Timestamptz
-
-  @@index([trackId, sequence])
-  @@map("track_points")
 }

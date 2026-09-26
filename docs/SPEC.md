@@ -127,22 +127,29 @@ CREATE TABLE tracks (
                                  -- question (no account deletion exists yet)
   -- party_id     UUID REFERENCES hunting_parties(id) -- target shape, added with RII-10
   imported_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  recorded_date   DATE -- date the walk happened, from the source file if present
+  recorded_date   DATE, -- date the walk happened, from the source file if present
+  segments        JSONB NOT NULL -- the whole track, see "Track geometry storage" below
 );
 
-CREATE TABLE track_points (
-  id          BIGSERIAL PRIMARY KEY,
-  track_id    UUID NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
-  sequence    INTEGER NOT NULL,      -- order within the track (across all segments)
-  segment     INTEGER NOT NULL DEFAULT 0, -- 0-based; a new segment starts after a
-                                          -- recording pause, so the map doesn't draw a
-                                          -- straight line across the gap
-  lat         DOUBLE PRECISION NOT NULL,
-  lng         DOUBLE PRECISION NOT NULL,
-  elevation_m DOUBLE PRECISION,
-  recorded_at TIMESTAMPTZ           -- may be null if source has no per-point timestamps
-);
-CREATE INDEX ON track_points (track_id, sequence);
+-- Track geometry storage (RII-3, decided with Miko 2026-09-26): each track's
+-- points live in tracks.segments as one JSONB value, not one row per point:
+--   [ [ point, point, ... ], [ point, ... ] ]   -- array of segments; a new
+--                                              -- segment starts after a recording
+--                                              -- pause (not drawn across)
+--   point = [lat, lng]                          -- always
+--         | [lat, lng, elevationM]              -- trailing nulls trimmed
+--         | [lat, lng, elevationM | null, recordedAtEpochMs]
+-- Why: tracks are only ever written, read and deleted whole — never queried or
+-- edited per point — so a row per point cost chunked multi-row inserts, a sort +
+-- regroup on every read, and ~2x the storage, for query power nothing used. The
+-- spatial queries that *will* be needed (fog of war RII-13, "tracks in this map
+-- area") want per-track line geometry with a spatial index, which rows of points
+-- don't give either; the planned path is PostGIS (a geometry column per track),
+-- a one-off conversion from this JSON since tracks are immutable. PostGIS needs
+-- explicit sign-off (new extension, raw SQL alongside Prisma).
+-- Shipped first as a track_points table (migration 20260926103425_add_tracks),
+-- converted in 20260926120000_store_track_segments_as_json: data copied into
+-- tracks.segments, then track_points dropped.
 
 -- MVP: RII-4, RII-5, RII-20, RII-22 — species reference list
 CREATE TABLE species (
@@ -223,9 +230,10 @@ Notes:
   vs. private areas?) are **not designed yet**. `RII-33` tracks doing that design
   properly before real (non-testing) deployment; don't build filtering logic ad hoc in
   the meantime.
-- Fog of war (RII-13, Post-MVP) is computed from `track_points` coverage + `sightings`
-  density at render/query time, not stored as its own table — revisit if that proves
-  too slow at scale.
+- Fog of war (RII-13, Post-MVP) is computed from track coverage (`tracks.segments`,
+  likely via PostGIS — see "Track geometry storage") + `sightings` density at
+  render/query time, not stored as its own table — revisit if that proves too slow
+  at scale.
 
 ### Sightings API
 
@@ -456,13 +464,13 @@ currently public).
   finite, `elevationM` finite if present, `recordedAt` a parseable timestamp if
   present. `400 { error: 'invalid_input', message }` otherwise (one Finnish message,
   not per-field — there's no form to attach field errors to). Owner = session user.
-  Track row + all points inserted in one transaction (points in chunks of 5,000 to
-  stay under Postgres's bind-parameter limit). Route-level `bodyLimit` of 25 MB (Fastify
+  Stored as one row, the points converted to the compact `segments` JSONB format
+  (§4). Route-level `bodyLimit` of 25 MB (Fastify
   defaults to 1 MB; the largest real Google Fit export tested was ~30k points ≈ 3 MB
   of JSON). `201 { track }` in the same shape as a `GET` item.
 - `DELETE /tracks/:id` — **owner only** (`403` for anyone else; unlike sightings,
   whose delete is unrestricted — a track is one person's recorded movement, so only
-  they remove it). Points go with it (`ON DELETE CASCADE`). `404` if it doesn't exist.
+  they remove it). `404` if it doesn't exist.
 
 ## 6. Map (RII-3, RII-5, RII-6)
 
