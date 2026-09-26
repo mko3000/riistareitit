@@ -51,6 +51,12 @@ update it before writing code, and commit spec changes alongside code.
 - Match existing code style and patterns. Read neighbouring files before writing new ones; do not introduce new libraries, frameworks, or patterns without a clear reason stated in the PR.
 - Keep changes scoped to the issue. Do not opportunistically refactor unrelated code in the same PR.
 - Write or update tests for any behavioural change. If you cannot run the tests, say so explicitly.
+- **Testing conventions** (`RII-36`; full setup in `docs/SPEC.md` §3 "Testing"):
+  - Frontend: `npm test` at the repo root; tests next to the code as `src/**/*.test.ts`. Logic only (parsers, formatting, API client) — no component tests for now.
+  - Server: `npm test` in `server/`; route tests in `server/test/*.test.ts` using `app.inject()` against the `riistareitit_test` database (needs the local Docker Postgres running). Tests must never use the dev database or read/write `server/.env` — the setup refuses any database not named `*_test`.
+  - Test data is small and synthetic. **Never** put real exported location data (e.g. anything from `data_import/`) in a test or fixture. A throwaway local check against real files is fine if it is deleted and not committed.
+  - A PR that changes behaviour includes tests for it. Run lint, build/typecheck and tests for every side you touched before pushing.
+  - "Tests pass" in an Agent report means the **CI run on the PR** passed (GitHub Actions, `.github/workflows/ci.yml`), not just a local run. If CI hasn't finished or failed, say so.
 - Conventional commit messages. Reference the Linear issue ID (`RII-N`) in both the commit message and the PR title/body — Linear's status automation only recognizes its own IDs, not GitHub's issue numbers, so a PR without `RII-N` in it won't move the ticket.
 - **Code in English, UI in Finnish** (Miko, 2026-09-25). Identifiers, comments, commit messages, DB values that code matches against (e.g. `species.key`) — all English. Anything a user actually sees — labels, button text, `species.name_fi`, error messages shown in the UI — Finnish, per `RII-7`. Don't pick a Finnish word for a code-facing identifier just because the domain concept is Finnish (e.g. a species' `key` is `'capercaillie'`, not `'metso'` — `name_fi` is where `'Metso'` belongs).
 

@@ -37,6 +37,19 @@ curl http://localhost:3001/health
 # {"status":"ok","db":"connected"}
 ```
 
+## Tests
+
+```sh
+docker compose up -d          # (repo root) the tests need the local Postgres running
+npm test                      # route tests against the riistareitit_test database
+```
+
+The tests use their own database, `riistareitit_test`, in the same local Postgres: it's
+created and migrated automatically on the first run, and emptied before every test.
+They never touch the dev database or read `server/.env`, and refuse to run against any
+database whose name doesn't end in `_test`. Point them elsewhere with
+`TEST_DATABASE_URL`. `npm run typecheck` type-checks the tests too (Vitest doesn't).
+
 ## Other scripts
 
 - `npm run build` / `npm run start` — compile and run the production build.

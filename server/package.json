@@ -11,7 +11,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.test.json"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -31,6 +33,7 @@
     "prisma": "^6.19.3",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^4.1.11"
   }
 }

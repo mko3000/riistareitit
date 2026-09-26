@@ -8,5 +8,8 @@ export default defineConfig({
   test: {
     // Track parsers use the browser's built-in DOMParser.
     environment: 'jsdom',
+    // Frontend tests only — server/ has its own Vitest config and a test
+    // database (RII-36).
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 })
