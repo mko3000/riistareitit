@@ -7,12 +7,13 @@ import { TrackImportControl } from './TrackImportControl'
 
 interface TracksLayerProps {
   user: PublicUser | null
+  barControls: HTMLElement | null
 }
 
 // RII-3: saved tracks (solid) + the import control with its previews
 // (dashed). Tracks are login-only, so logged out this shows no tracks. See
 // docs/SPEC.md §5/§6.
-export function TracksLayer({ user }: TracksLayerProps) {
+export function TracksLayer({ user, barControls }: TracksLayerProps) {
   const [tracks, setTracks] = useState<PublicTrack[]>([])
 
   // One canvas for all saved tracks — much cheaper than an SVG path per
@@ -61,7 +62,7 @@ export function TracksLayer({ user }: TracksLayerProps) {
           </Popup>
         </Polyline>
       ))}
-      <TrackImportControl user={user} onSaved={handleSaved} />
+      <TrackImportControl user={user} onSaved={handleSaved} barControls={barControls} />
     </>
   )
 }

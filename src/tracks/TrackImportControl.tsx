@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Polyline, useMap } from 'react-leaflet'
 import L, { type LatLngTuple } from 'leaflet'
 import { createTrack, type PublicTrack, type PublicUser } from '../api'
@@ -61,14 +62,18 @@ async function parseFile(file: File): Promise<ImportEntry> {
 interface TrackImportControlProps {
   user: PublicUser | null
   onSaved: (track: PublicTrack) => void
+  // RII-40: where the "Tuo reittejä" button renders — the top bar's controls
+  // slot. Null until the top bar has mounted.
+  barControls: HTMLElement | null
 }
 
 // RII-16: pick track files (several at once), parse them in the browser and
 // preview them on the map. RII-3: save them (login required). See
 // docs/SPEC.md §5 "Import UI". Rendered inside <MapContainer> for useMap();
 // the panel stops its own clicks from reaching the map so they don't open
-// the add-sighting popup.
-export function TrackImportControl({ user, onSaved }: TrackImportControlProps) {
+// the add-sighting popup. The button is portaled into the top bar (RII-40);
+// the panel and previews stay on the map.
+export function TrackImportControl({ user, onSaved, barControls }: TrackImportControlProps) {
   const map = useMap()
   const [entries, setEntries] = useState<ImportEntry[]>([])
   const [reading, setReading] = useState(false)
@@ -136,20 +141,21 @@ export function TrackImportControl({ user, onSaved }: TrackImportControlProps) {
         ) : null,
       )}
 
-      <div ref={panelRef} className="track-import">
-        {/* No `accept` filter on purpose — on phones it greys out .tcx/.gpx/.kml
-            files, since those have no well-known MIME type. Bad files are
-            rejected per file after picking instead. */}
-        <input ref={fileInputRef} type="file" multiple hidden onChange={handleFilesPicked} />
-        <button
-          type="button"
-          className="track-import-button"
-          disabled={reading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {reading ? 'Luetaan…' : 'Tuo reittejä'}
-        </button>
+      {barControls &&
+        createPortal(
+          <>
+            {/* No `accept` filter on purpose — on phones it greys out .tcx/.gpx/.kml
+                files, since those have no well-known MIME type. Bad files are
+                rejected per file after picking instead. */}
+            <input ref={fileInputRef} type="file" multiple hidden onChange={handleFilesPicked} />
+            <button type="button" disabled={reading} onClick={() => fileInputRef.current?.click()}>
+              {reading ? 'Luetaan…' : 'Tuo reittejä'}
+            </button>
+          </>,
+          barControls,
+        )}
 
+      <div ref={panelRef} className="track-import">
         {entries.length > 0 && (
           <div className="track-import-panel">
             {!user && <p className="track-import-note">Kirjaudu sisään tallentaaksesi reitit.</p>}

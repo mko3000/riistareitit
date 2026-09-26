@@ -9,6 +9,10 @@ interface AuthBarProps {
   user: PublicUser | null
   checkingSession: boolean
   onUserChange: (user: PublicUser | null) => void
+  // RII-40: other features render their top-bar controls into this element
+  // (via a portal) — e.g. the track import button, which has to live inside
+  // the map's React tree.
+  controlsSlotRef: (element: HTMLDivElement | null) => void
 }
 
 // RII-31: the permanent home for sign-up/login/logout — replaces the
@@ -16,7 +20,7 @@ interface AuthBarProps {
 // worked. Auth state itself lives in App since RII-3: the tracks layer also
 // needs to know who's logged in (tracks are login-only, delete is
 // owner-only).
-export function AuthBar({ user, checkingSession, onUserChange }: AuthBarProps) {
+export function AuthBar({ user, checkingSession, onUserChange, controlsSlotRef }: AuthBarProps) {
   const [authView, setAuthView] = useState<AuthView>(null)
 
   function handleAuthenticated(authenticatedUser: PublicUser) {
@@ -32,6 +36,7 @@ export function AuthBar({ user, checkingSession, onUserChange }: AuthBarProps) {
   return (
     <header className="top-nav">
       <span className="app-name">Riistareitit</span>
+      <div ref={controlsSlotRef} className="bar-controls"></div>
 
       <div className="auth-controls">
         {checkingSession ? (

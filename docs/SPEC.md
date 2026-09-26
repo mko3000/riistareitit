@@ -422,8 +422,11 @@ type ImportedTrack = {
 
 ### Import UI (`src/tracks/TrackImportControl.tsx`)
 
-- A "Tuo reittejä" button in the map's top-left corner, below the zoom control. Big
-  enough to tap on a phone.
+- A "Tuo reittejä" button in the top bar, next to the app name (moved there from the
+  map's corner in `RII-40`). The import control itself still lives inside the map
+  (it needs the map for previews and zooming to them) and renders just the button
+  into a slot the top bar exposes, via a React portal. The result panel stays on the
+  map, top-left below the zoom control.
 - Opens the OS file picker with **multiple selection**. The `<input type="file">`
   deliberately has **no `accept` filter**: on Android and iOS, filters for extensions
   without a well-known MIME type (`.tcx`, `.gpx`, `.kml`) grey out exactly the files
