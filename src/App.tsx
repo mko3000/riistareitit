@@ -1,6 +1,7 @@
 import { MapContainer, TileLayer } from 'react-leaflet'
 import { AuthBar } from './auth/AuthBar'
 import { SightingsLayer } from './sightings/SightingsLayer'
+import { TrackImportControl } from './tracks/TrackImportControl'
 
 // Roughly centers the initial view over Finland.
 const DEFAULT_CENTER: [number, number] = [64.5, 26.0]
@@ -16,6 +17,7 @@ function App() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+          <TrackImportControl />
           <SightingsLayer />
         </MapContainer>
       </div>

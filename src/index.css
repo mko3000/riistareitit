@@ -217,3 +217,81 @@ body,
 .sighting-marker {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
+
+/* RII-16: track import button + result panel, top-left under Leaflet's
+   zoom control. Sized for thumbs — this gets used on phones. */
+.track-import {
+  position: absolute;
+  top: 84px; /* below the zoom control */
+  left: 10px;
+  z-index: 1000; /* above Leaflet's own panes */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  max-width: min(20rem, calc(100% - 20px));
+  font-family: sans-serif;
+  font-size: 0.9rem;
+}
+
+.track-import-button {
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  font-size: 1rem;
+  background: white;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.track-import-panel {
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.track-import-note {
+  margin: 0 0 0.4rem;
+  color: #555;
+  font-size: 0.8rem;
+}
+
+.track-import-list {
+  list-style: none;
+  margin: 0 0 0.4rem;
+  padding: 0;
+}
+
+.track-import-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.track-import-list .icon-button {
+  /* A comfortable tap target despite the small glyph. */
+  min-width: 2rem;
+  min-height: 2rem;
+}
+
+.track-import-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.track-import-name {
+  font-weight: bold;
+  overflow-wrap: anywhere; /* Google Fit file names are one long token */
+}
+
+.track-import-error {
+  color: #b00020;
+}
