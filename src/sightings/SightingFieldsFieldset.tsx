@@ -1,5 +1,7 @@
 import type { Species, SightingFieldErrors } from '../api'
 import { HALF_HOUR_OPTIONS } from './dateTime'
+import { displayPerson } from './displayPerson'
+import { t } from '../i18n'
 
 export type Kind = 'sighting' | 'kill'
 
@@ -60,20 +62,20 @@ export function SightingFieldsFieldset({
 }: SightingFieldsFieldsetProps) {
   return (
     <>
-      <div className="button-row" role="group" aria-label="Type">
+      <div className="button-row" role="group" aria-label={t.sightings.kindGroup}>
         <button
           type="button"
           className={kind === 'sighting' ? 'selected' : ''}
           onClick={() => onKindChange('sighting')}
         >
-          Sighting
+          {t.sightings.kindSighting}
         </button>
         <button type="button" className={kind === 'kill' ? 'selected' : ''} onClick={() => onKindChange('kill')}>
-          Kill
+          {t.sightings.kindKill}
         </button>
       </div>
 
-      <div className="button-row" role="group" aria-label="Species">
+      <div className="button-row" role="group" aria-label={t.sightings.speciesGroup}>
         {speciesList.map((species) => (
           <button
             key={species.key}
@@ -89,7 +91,7 @@ export function SightingFieldsFieldset({
           className={selectedSpecies === OTHER ? 'selected' : ''}
           onClick={() => onSelectedSpeciesChange(OTHER)}
         >
-          Other
+          {t.sightings.otherSpecies}
         </button>
       </div>
       {selectedSpecies === OTHER && (
@@ -97,8 +99,8 @@ export function SightingFieldsFieldset({
           type="text"
           value={customSpecies}
           onChange={(e) => onCustomSpeciesChange(e.target.value)}
-          placeholder="Species"
-          aria-label="Custom species"
+          placeholder={t.sightings.customSpeciesPlaceholder}
+          aria-label={t.sightings.customSpeciesLabel}
         />
       )}
       {fieldErrors.species && <p className="field-error">{fieldErrors.species}</p>}
@@ -116,26 +118,26 @@ export function SightingFieldsFieldset({
                   onEditingPersonChange(false)
                 }
               }}
-              aria-label="Person"
+              aria-label={t.sightings.person}
               autoFocus
             />
             <button
               type="button"
               className="icon-button"
               onClick={() => onEditingPersonChange(false)}
-              aria-label="Done editing person"
+              aria-label={t.sightings.donePerson}
             >
               ✓
             </button>
           </>
         ) : (
           <>
-            <span>{personDisplay}</span>
+            <span>{displayPerson(personDisplay)}</span>
             <button
               type="button"
               className="icon-button"
               onClick={() => onEditingPersonChange(true)}
-              aria-label="Edit person"
+              aria-label={t.sightings.editPerson}
             >
               ✏️
             </button>
@@ -144,12 +146,12 @@ export function SightingFieldsFieldset({
       </div>
 
       <label>
-        Date
+        {t.sightings.date}
         <input type="date" value={date} onChange={(e) => onDateChange(e.target.value)} />
       </label>
 
       <label>
-        Time
+        {t.sightings.time}
         <select value={time} onChange={(e) => onTimeChange(e.target.value)}>
           {HALF_HOUR_OPTIONS.map((option) => (
             <option key={option} value={option}>
@@ -161,7 +163,7 @@ export function SightingFieldsFieldset({
 
       {notes !== undefined && onNotesChange && (
         <label>
-          Notes
+          {t.sightings.notes}
           <textarea rows={2} value={notes} onChange={(e) => onNotesChange(e.target.value)} />
         </label>
       )}

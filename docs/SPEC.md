@@ -465,8 +465,10 @@ currently public).
   `sourceFormat` one of the four, `recordedDate` `"YYYY-MM-DD"` if present, ≥1
   non-empty segment, **≤ 200,000 points** total, each point's lat/lng in range and
   finite, `elevationM` finite if present, `recordedAt` a parseable timestamp if
-  present. `400 { error: 'invalid_input', message }` otherwise (one Finnish message,
-  not per-field — there's no form to attach field errors to). Owner = session user.
+  present. `400 { error: 'invalid_input', message }` otherwise (one message, not
+  per-field — there's no form to attach field errors to), except too many points,
+  which is `400 { error: 'too_many_points' }` so the UI can say the track is too big
+  (as for a `413` from the body limit). Messages are English/developer-facing (§7). Owner = session user.
   Stored as one row, the points converted to the compact `segments` JSONB format
   (§4). Route-level `bodyLimit` of 25 MB (Fastify
   defaults to 1 MB; the largest real Google Fit export tested was ~30k points ≈ 3 MB
@@ -523,6 +525,27 @@ currently public).
   species list are authored in Finnish first.
 - UI strings must be externalized (i18n keys, not inline literals) from the start even
   though English isn't wired up until Post-MVP — retrofitting this later is expensive.
+  **Implemented in `RII-7`:**
+  - Every user-visible string lives in **`src/i18n/fi.ts`**: one object grouped by
+    feature (`common`, `auth`, `sightings`, `tracks`); strings with values in them are
+    small functions (e.g. `t.tracks.pointCount(574)` → "574 pistettä"). Components
+    import **`t` from `src/i18n`**, which is just `fi` for now. The English toggle
+    (`RII-14`) adds `en.ts` with the same shape (typed against `Messages`, the type of
+    `fi`) and picks between them in `src/i18n/index.ts` — no component changes.
+    Deliberately no i18n library yet.
+  - **The UI never shows the server's `message` text.** It picks its Finnish text by the
+    response's `error` code (and, for `invalid_input`, by which fields are in
+    `fieldErrors`) — see the mapping in `src/api.ts`. Server `message`s are English,
+    developer-facing, for logs and debugging only. So auth/sightings/tracks routes don't
+    need translating, and adding English later is a frontend-only change.
+  - The sign-up password message hardcodes 8 characters, mirroring the server's
+    `MIN_PASSWORD_LENGTH` — change both together.
+  - `sightings.person_display` stores the sentinel `'unknown'` when nobody is named
+    (code-facing, unchanged); the UI displays it as "Tuntematon".
+  - Dates shown in the UI are Finnish `d.m.yyyy` (`src/tracks/format.ts`'s
+    `formatFinnishDate`, shared). `<html lang="fi">`.
+  - Not translated: the map tiles' OpenStreetMap attribution (license text), and
+    anything the browser renders itself (native date picker, `confirm()` buttons).
 - Species translation (Post-MVP): `species.name_en` holds the English common name for
   preset species. User-entered custom species are **not** translated (no reliable way
   to translate free text) — the toggle only affects UI chrome and preset species names.

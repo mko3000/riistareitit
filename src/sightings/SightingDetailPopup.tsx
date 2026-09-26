@@ -11,6 +11,9 @@ import {
 } from '../api'
 import { nowRoundedTo30Min } from './dateTime'
 import { SightingFieldsFieldset, OTHER, type Kind } from './SightingFieldsFieldset'
+import { displayPerson } from './displayPerson'
+import { formatFinnishDate } from '../tracks/format'
+import { t } from '../i18n'
 
 // 5 decimals is ~1.1m of precision at these latitudes — plenty for "did the
 // pin end up roughly where I tapped", without a long string of noise digits.
@@ -143,7 +146,7 @@ export function SightingDetailPopup({
   async function handleDelete() {
     // Ticket's own words: "a plain 'are you sure?' is enough" — the
     // native confirm() dialog says exactly that, no custom UI needed.
-    if (!window.confirm('Delete this marking? This cannot be undone.')) return
+    if (!window.confirm(t.sightings.confirmDelete)) return
 
     setDeleting(true)
     const result = await deleteSighting(sighting.id)
@@ -166,16 +169,16 @@ export function SightingDetailPopup({
       // location instead of just switching this popup to edit mode.
       <div className="sighting-detail" onClick={(e) => e.stopPropagation()}>
         <p>
-          <strong>{sighting.kind === 'kill' ? 'Kill' : 'Sighting'}</strong> — {speciesLabel}
+          <strong>{sighting.kind === 'kill' ? t.sightings.kindKill : t.sightings.kindSighting}</strong> — {speciesLabel}
         </p>
         <p>{formatCoords(sighting.lat, sighting.lng)}</p>
-        <p>{sighting.personDisplay}</p>
+        <p>{displayPerson(sighting.personDisplay)}</p>
         <p>
-          {sighting.observedDate}
+          {formatFinnishDate(sighting.observedDate)}
           {sighting.observedTime ? ` ${sighting.observedTime}` : ''}
         </p>
         {sighting.notes && <p className="notes">{sighting.notes}</p>}
-        <button type="button" className="icon-button" onClick={startEditing} aria-label="Edit">
+        <button type="button" className="icon-button" onClick={startEditing} aria-label={t.common.edit}>
           ✏️
         </button>
       </div>
@@ -189,7 +192,7 @@ export function SightingDetailPopup({
           move flow the old standalone "Move" button did. */}
       <div className="person-row">
         <span>{formatCoords(currentPosition.lat, currentPosition.lng)}</span>
-        <button type="button" className="icon-button" onClick={onMove} aria-label="Move">
+        <button type="button" className="icon-button" onClick={onMove} aria-label={t.sightings.move}>
           ✏️
         </button>
       </div>
@@ -224,7 +227,7 @@ export function SightingDetailPopup({
             className="icon-button"
             onClick={handleDelete}
             disabled={deleting}
-            aria-label="Delete"
+            aria-label={t.common.delete}
           >
             🗑️
           </button>
@@ -237,9 +240,9 @@ export function SightingDetailPopup({
               setMode('view')
             }}
           >
-            Cancel
+            {t.common.cancel}
           </button>
-          <button type="submit" className="add-button" disabled={!isValid || submitting} aria-label="Save">
+          <button type="submit" className="add-button" disabled={!isValid || submitting} aria-label={t.common.save}>
             ✓
           </button>
         </div>

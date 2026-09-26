@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { login, type PublicUser } from '../api'
+import { t } from '../i18n'
 
 interface LoginFormProps {
   onLoggedIn: (user: PublicUser) => void
@@ -35,9 +36,9 @@ export function LoginForm({ onLoggedIn, onSwitchToSignup }: LoginFormProps) {
 
   return (
     <form className="signup-form" onSubmit={handleSubmit}>
-      <h2>Log in</h2>
+      <h2>{t.auth.logIn}</h2>
 
-      <label htmlFor="login-email">Email</label>
+      <label htmlFor="login-email">{t.auth.email}</label>
       <input
         id="login-email"
         type="email"
@@ -47,7 +48,7 @@ export function LoginForm({ onLoggedIn, onSwitchToSignup }: LoginFormProps) {
         required
       />
 
-      <label htmlFor="login-password">Password</label>
+      <label htmlFor="login-password">{t.auth.password}</label>
       <input
         id="login-password"
         type="password"
@@ -60,11 +61,11 @@ export function LoginForm({ onLoggedIn, onSwitchToSignup }: LoginFormProps) {
       {formError && <p className="form-error">{formError}</p>}
 
       <button type="submit" disabled={submitting}>
-        {submitting ? 'Logging in…' : 'Log in'}
+        {submitting ? t.auth.loggingIn : t.auth.logIn}
       </button>
 
       <button type="button" className="link-button" onClick={onSwitchToSignup}>
-        Need an account? Sign up
+        {t.auth.switchToSignUp}
       </button>
     </form>
   )

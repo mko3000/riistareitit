@@ -4,6 +4,7 @@ import type { Popup as LeafletPopup } from 'leaflet'
 import { getSightings, type PublicSighting } from '../api'
 import { AddSightingForm } from './AddSightingForm'
 import { SightingMarker } from './SightingMarker'
+import { t } from '../i18n'
 
 interface PendingLocation {
   lat: number
@@ -81,7 +82,7 @@ export function SightingsLayer() {
   return (
     <>
       {movingSightingId && (
-        <div className="move-banner">Tap the map to move this marking (Esc to cancel)</div>
+        <div className="move-banner">{t.sightings.moveBanner}</div>
       )}
 
       {sightings.map((sighting) => (

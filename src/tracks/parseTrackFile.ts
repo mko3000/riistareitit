@@ -3,6 +3,7 @@ import { TrackParseError } from './parsers/common'
 import { parseGpx } from './parsers/gpx'
 import { parseKml } from './parsers/kml'
 import { parseTcx } from './parsers/tcx'
+import { t } from '../i18n'
 
 // Formats whose parser has shipped. JSON (RII-18) is added here when it
 // lands.
@@ -26,9 +27,7 @@ function extensionOf(fileName: string): string {
 export function parseTrackFile(fileName: string, text: string): ImportedTrack {
   const parser = PARSERS[extensionOf(fileName) as TrackSourceFormat]
   if (!parser) {
-    throw new TrackParseError(
-      `Tiedostomuotoa ei tueta (${fileName}). Tuetut muodot: ${SUPPORTED_FORMATS_LABEL}.`,
-    )
+    throw new TrackParseError(t.tracks.errors.unsupportedFormat(fileName, SUPPORTED_FORMATS_LABEL))
   }
   return parser(text)
 }

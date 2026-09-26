@@ -8,6 +8,7 @@ import { parseTrackFile } from './parseTrackFile'
 import { TrackParseError } from './parsers/common'
 import { trackDistanceM, trackPointCount } from './trackStats'
 import type { ImportedTrack } from './types'
+import { t } from '../i18n'
 
 type ParsedEntry = {
   id: number
@@ -53,7 +54,7 @@ async function parseFile(file: File): Promise<ImportEntry> {
     }
   } catch (err) {
     const message =
-      err instanceof TrackParseError ? err.message : `Tiedoston ${file.name} lukeminen epäonnistui.`
+      err instanceof TrackParseError ? err.message : t.tracks.errors.readFailed(file.name)
     if (!(err instanceof TrackParseError)) console.error(err)
     return { id, fileName: file.name, status: 'error', message }
   }
@@ -149,7 +150,7 @@ export function TrackImportControl({ user, onSaved, barControls }: TrackImportCo
                 rejected per file after picking instead. */}
             <input ref={fileInputRef} type="file" multiple hidden onChange={handleFilesPicked} />
             <button type="button" disabled={reading} onClick={() => fileInputRef.current?.click()}>
-              {reading ? 'Luetaan…' : 'Tuo reittejä'}
+              {reading ? t.tracks.reading : t.tracks.importButton}
             </button>
           </>,
           barControls,
@@ -158,7 +159,7 @@ export function TrackImportControl({ user, onSaved, barControls }: TrackImportCo
       <div ref={panelRef} className="track-import">
         {entries.length > 0 && (
           <div className="track-import-panel">
-            {!user && <p className="track-import-note">Kirjaudu sisään tallentaaksesi reitit.</p>}
+            {!user && <p className="track-import-note">{t.tracks.loginToSave}</p>}
             <ul className="track-import-list">
               {entries.map((entry) => (
                 <li key={entry.id} className={entry.status === 'error' ? 'track-import-error' : undefined}>
@@ -167,7 +168,7 @@ export function TrackImportControl({ user, onSaved, barControls }: TrackImportCo
                     {entry.status === 'ok' && (
                       <span>
                         {entry.track.recordedDate && `${formatFinnishDate(entry.track.recordedDate)} · `}
-                        {formatKm(entry.distanceM)} · {entry.pointCount} pistettä
+                        {formatKm(entry.distanceM)} · {t.tracks.pointCount(entry.pointCount)}
                       </span>
                     )}
                     {entry.status === 'error' && <span>{entry.message}</span>}
@@ -179,14 +180,14 @@ export function TrackImportControl({ user, onSaved, barControls }: TrackImportCo
                         disabled={entry.saving}
                         onClick={() => saveEntry(entry)}
                       >
-                        {entry.saving ? 'Tallennetaan…' : 'Tallenna'}
+                        {entry.saving ? t.tracks.saving : t.common.save}
                       </button>
                     )}
                   </div>
                   <button
                     type="button"
                     className="icon-button"
-                    aria-label={`Poista ${entry.fileName}`}
+                    aria-label={t.tracks.removeFile(entry.fileName)}
                     disabled={entry.status === 'ok' && entry.saving}
                     onClick={() => removeEntry(entry.id)}
                   >
@@ -198,11 +199,11 @@ export function TrackImportControl({ user, onSaved, barControls }: TrackImportCo
             <div className="track-import-actions">
               {user && parsedCount > 1 && (
                 <button type="button" className="track-save-button" disabled={anySaving} onClick={saveAll}>
-                  Tallenna kaikki
+                  {t.tracks.saveAll}
                 </button>
               )}
               <button type="button" className="link-button" disabled={anySaving} onClick={() => setEntries([])}>
-                Tyhjennä kaikki
+                {t.tracks.clearAll}
               </button>
             </div>
           </div>
