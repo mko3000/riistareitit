@@ -295,3 +295,46 @@ body,
 .track-import-error {
   color: #b00020;
 }
+
+/* RII-3: saving from the import panel, and the saved-track popup. */
+.track-save-button {
+  align-self: flex-start;
+  min-height: 2.25rem;
+  margin-top: 0.25rem;
+  padding: 0 0.75rem;
+  background: #2563eb;
+  color: white;
+  border: 1px solid #2563eb;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.track-save-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.track-import-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.track-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 11rem;
+  font-family: sans-serif;
+  font-size: 0.9rem;
+}
+
+.track-detail p {
+  margin: 0;
+}
+
+.track-detail button {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+}

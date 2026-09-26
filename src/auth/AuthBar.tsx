@@ -1,35 +1,32 @@
-import { useEffect, useState } from 'react'
-import { getMe, logout, type PublicUser } from '../api'
+import { useState } from 'react'
+import { logout, type PublicUser } from '../api'
 import { SignupForm } from './SignupForm'
 import { LoginForm } from './LoginForm'
 
 type AuthView = 'signup' | 'login' | null
 
+interface AuthBarProps {
+  user: PublicUser | null
+  checkingSession: boolean
+  onUserChange: (user: PublicUser | null) => void
+}
+
 // RII-31: the permanent home for sign-up/login/logout — replaces the
 // temporary floating panel RII-29/RII-30 used just to prove the endpoints
-// worked. Owns its own auth state; nothing else in the app currently needs
-// to know who's logged in.
-export function AuthBar() {
-  const [user, setUser] = useState<PublicUser | null>(null)
-  const [checkingSession, setCheckingSession] = useState(true)
+// worked. Auth state itself lives in App since RII-3: the tracks layer also
+// needs to know who's logged in (tracks are login-only, delete is
+// owner-only).
+export function AuthBar({ user, checkingSession, onUserChange }: AuthBarProps) {
   const [authView, setAuthView] = useState<AuthView>(null)
 
-  // RII-30's acceptance criterion: session (and now the UI reflecting it)
-  // persists across a reload.
-  useEffect(() => {
-    getMe()
-      .then(setUser)
-      .finally(() => setCheckingSession(false))
-  }, [])
-
   function handleAuthenticated(authenticatedUser: PublicUser) {
-    setUser(authenticatedUser)
+    onUserChange(authenticatedUser)
     setAuthView(null)
   }
 
   async function handleLogout() {
     await logout()
-    setUser(null)
+    onUserChange(null)
   }
 
   return (
