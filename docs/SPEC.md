@@ -384,12 +384,23 @@ type ImportedTrack = {
   Google Fit's older Takeout layout (`All Sessions` / `Kaikki harjoituskerrat` JSON)
   has no location data, and its `All Data` location dumps aren't split per walk —
   neither is supported.
-- **GPX** (`RII-25`) — `<trk>/<trkseg>/<trkpt lat lon><ele><time>`; each `<trkseg>` is
-  a segment. Also accept route files (`<rte>/<rtept>`, e.g. Sports Tracker's
-  "-route.gpx" export — same points, no times); each `<rte>` is a segment.
-- **KML** (`RII-15`) — `<LineString><coordinates>` ("lng,lat[,ele]" tuples, whitespace
-  separated; no per-point time). Sports Tracker exports this. Also `<gx:Track>` with
-  paired `<when>`/`<gx:coord>` if present (has times).
+- **GPX** (`RII-25`, implemented) — GPX 1.0 and 1.1. Tracks:
+  `<trk>/<trkseg>/<trkpt lat lon><ele><time>`, each `<trkseg>` is a segment. Routes:
+  `<rte>/<rtept>` (e.g. Sports Tracker's "-route.gpx" export — same points as its
+  "-track.gpx", no times), each `<rte>` is a segment. **Routes are only used when the
+  file has no track points** — a file carrying both would otherwise draw the same walk
+  twice. Waypoints (`<wpt>`) and `<extensions>` (heart rate etc.) are ignored. Name:
+  the first `<trk>`'s (or, for route-only files, `<rte>`'s) `<name>`, else
+  `<metadata><name>`.
+- **KML** (`RII-15`, implemented) — Sports Tracker exports this. Every `<LineString>`
+  anywhere in the file (including inside `<MultiGeometry>`) is a segment:
+  `<coordinates>` holds whitespace-separated "lng,lat[,ele]" tuples, no per-point
+  time. Every `<gx:Track>` (including inside `<gx:MultiTrack>`, e.g. Google Earth /
+  Google My Maps exports) is also a segment: `<gx:coord>` "lng lat [ele]" paired by
+  index with `<when>` times. Points, polygons (`<LinearRing>`) and styles are ignored.
+  Name: the first `<Placemark>` with a line's `<name>` — **not** `<Document><name>`,
+  which is typically the exporting app's generic label ("Sports Tracker Route"), so
+  the UI's file-name fallback is more useful. Zipped `.kmz` is not supported.
 - **Apple** (`RII-17`) — probably no new parser: Apple Health's `export.zip` stores
   routes as GPX under `workout-routes/`. To confirm with a real export.
 - **JSON** (`RII-18`) — our own schema, essentially `ImportedTrack` serialized directly;
