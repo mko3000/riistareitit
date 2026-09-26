@@ -54,12 +54,36 @@ tickets, as the behavioural source of truth — tickets link back here once impl
 - **Styling:** deliberately minimal — a handful of plain CSS rules to make the map
   container fill the viewport (`src/index.css`), no design system or component
   library. Revisit once the app has more than one screen/feature worth styling.
-- **Testing:** **Vitest** (frontend, repo root), added with `RII-16` — the first code
-  with pure logic worth unit-testing (track file parsers). Run with `npm test`. Test
-  environment is `jsdom` (pinned to 26.x: newer majors need Node 22+, dev machines are
-  on Node 20) because the parsers use the browser's built-in `DOMParser`. Tests live
-  next to the code as `*.test.ts`, with small synthetic inline test data — never real
-  exported location data. The server has no test setup yet.
+- **Testing** (formalized in `RII-36`, decisions by Miko 2026-09-26). **Vitest** on
+  both sides; conventions for contributors (humans and agents) are in `CLAUDE.md`.
+  - **Frontend** (repo root, `npm test`): unit tests next to the code as `*.test.ts`,
+    `jsdom` environment (pinned to 26.x: newer majors need Node 22+, dev machines are
+    on Node 20) because the track parsers use the browser's `DOMParser`. Scope is
+    **logic only** — parsers, formatting, the API client's error mapping (`fetch`
+    stubbed). No component/React Testing Library tests for now: the UI is small and
+    Leaflet-heavy (popups, portals, map events), where component tests are costly to
+    write and brittle; UI is checked by hand in a browser. Revisit when the UI grows
+    or a UI bug slips through that a test would have caught.
+  - **Server** (`server/`, `npm test`): route tests in `server/test/*.test.ts` drive the
+    real Fastify app in-process (`app.inject()`, no port) against a **real Postgres test
+    database**, `riistareitit_test` — a second database in the same local Docker
+    Postgres, never the dev one. `server/test/globalSetup.ts` points `DATABASE_URL` at
+    it (overridable via `TEST_DATABASE_URL`), **refuses to run unless the database
+    name ends in `_test`**, applies migrations (`prisma migrate deploy`, which also
+    creates the database if missing) and seeds species once per run. Each test starts
+    from empty `users`/`sessions`/`sightings`/`tracks` (truncated; `species` kept).
+    Test files run one at a time (shared database). Tests never read or write
+    `server/.env`. The app is built by `buildApp()` in `server/src/app.ts` (plugins,
+    routes, error handler, `/health`); `src/index.ts` only builds it and listens.
+    `npm run typecheck` type-checks `src/` and `test/` (Vitest doesn't); the build
+    (`tsconfig.json`) still compiles `src/` only.
+  - **CI** (`.github/workflows/ci.yml`, GitHub Actions): on every pull request (each
+    push to it) and every push to `main`. Two jobs — *frontend*: `npm ci`, lint, build
+    (incl. `tsc -b`), test; *server*: Postgres 16 service container, `npm ci`, lint,
+    typecheck, build, test. Node 20, matching dev machines. Merging into `main` should
+    require both jobs to pass — a GitHub branch-protection setting Miko enables by
+    hand (not in the repo). No local git hooks: CI is the source of truth.
+  - Test data is small and synthetic — never real exported location data.
 - **Hosting/deployment:** not yet decided.
 
 These are now the actual choices in the repo, not just proposals — update this section

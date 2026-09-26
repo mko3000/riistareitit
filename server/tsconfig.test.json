@@ -1,0 +1,13 @@
+{
+  // RII-36: type-checks tests alongside the source (Vitest itself doesn't).
+  // The build (tsconfig.json) still compiles src/ only.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    // vitest.config.ts imports a .ts file directly (Vite's config loader wants
+    // the real extension); fine since nothing here is emitted.
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}
