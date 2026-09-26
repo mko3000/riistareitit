@@ -1,11 +1,13 @@
 import type { ImportedTrack, TrackSourceFormat } from './types'
 import { TrackParseError } from './parsers/common'
+import { parseGpx } from './parsers/gpx'
 import { parseTcx } from './parsers/tcx'
 
-// Formats whose parser has shipped. GPX (RII-25), KML (RII-15) and JSON
-// (RII-18) are added here as they land.
+// Formats whose parser has shipped. KML (RII-15) and JSON (RII-18) are
+// added here as they land.
 const PARSERS: Partial<Record<TrackSourceFormat, (text: string) => ImportedTrack>> = {
   tcx: parseTcx,
+  gpx: parseGpx,
 }
 
 export const SUPPORTED_FORMATS_LABEL = Object.keys(PARSERS)

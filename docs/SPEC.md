@@ -384,9 +384,14 @@ type ImportedTrack = {
   Google Fit's older Takeout layout (`All Sessions` / `Kaikki harjoituskerrat` JSON)
   has no location data, and its `All Data` location dumps aren't split per walk —
   neither is supported.
-- **GPX** (`RII-25`) — `<trk>/<trkseg>/<trkpt lat lon><ele><time>`; each `<trkseg>` is
-  a segment. Also accept route files (`<rte>/<rtept>`, e.g. Sports Tracker's
-  "-route.gpx" export — same points, no times); each `<rte>` is a segment.
+- **GPX** (`RII-25`, implemented) — GPX 1.0 and 1.1. Tracks:
+  `<trk>/<trkseg>/<trkpt lat lon><ele><time>`, each `<trkseg>` is a segment. Routes:
+  `<rte>/<rtept>` (e.g. Sports Tracker's "-route.gpx" export — same points as its
+  "-track.gpx", no times), each `<rte>` is a segment. **Routes are only used when the
+  file has no track points** — a file carrying both would otherwise draw the same walk
+  twice. Waypoints (`<wpt>`) and `<extensions>` (heart rate etc.) are ignored. Name:
+  the first `<trk>`'s (or, for route-only files, `<rte>`'s) `<name>`, else
+  `<metadata><name>`.
 - **KML** (`RII-15`) — `<LineString><coordinates>` ("lng,lat[,ele]" tuples, whitespace
   separated; no per-point time). Sports Tracker exports this. Also `<gx:Track>` with
   paired `<when>`/`<gx:coord>` if present (has times).
