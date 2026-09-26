@@ -54,6 +54,12 @@ tickets, as the behavioural source of truth — tickets link back here once impl
 - **Styling:** deliberately minimal — a handful of plain CSS rules to make the map
   container fill the viewport (`src/index.css`), no design system or component
   library. Revisit once the app has more than one screen/feature worth styling.
+- **Testing:** **Vitest** (frontend, repo root), added with `RII-16` — the first code
+  with pure logic worth unit-testing (track file parsers). Run with `npm test`. Test
+  environment is `jsdom` (pinned to 26.x: newer majors need Node 22+, dev machines are
+  on Node 20) because the parsers use the browser's built-in `DOMParser`. Tests live
+  next to the code as `*.test.ts`, with small synthetic inline test data — never real
+  exported location data. The server has no test setup yet.
 - **Hosting/deployment:** not yet decided.
 
 These are now the actual choices in the repo, not just proposals — update this section
@@ -113,8 +119,9 @@ CREATE TABLE hunting_party_members (
 CREATE TABLE tracks (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name            TEXT,
-  source_format   TEXT NOT NULL, -- 'gpx' | 'kml' | 'google_fit' | 'apple' | 'json'
-  owner_user_id   UUID REFERENCES users(id),      -- null until Post-MVP auth ships
+  source_format   TEXT NOT NULL, -- 'tcx' | 'gpx' | 'kml' | 'json' (the file format, not
+                                 -- the app it came from: Google Fit exports are 'tcx')
+  owner_user_id   UUID REFERENCES users(id),      -- the logged-in uploader; import requires login
   party_id        UUID REFERENCES hunting_parties(id), -- null until Post-MVP parties ship
   imported_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   recorded_date   DATE -- date the walk happened, from the source file if present
@@ -123,7 +130,10 @@ CREATE TABLE tracks (
 CREATE TABLE track_points (
   id          BIGSERIAL PRIMARY KEY,
   track_id    UUID NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
-  sequence    INTEGER NOT NULL,      -- order within the track
+  sequence    INTEGER NOT NULL,      -- order within the track (across all segments)
+  segment     INTEGER NOT NULL DEFAULT 0, -- 0-based; a new segment starts after a
+                                          -- recording pause, so the map doesn't draw a
+                                          -- straight line across the gap
   lat         DOUBLE PRECISION NOT NULL,
   lng         DOUBLE PRECISION NOT NULL,
   elevation_m DOUBLE PRECISION,
@@ -317,27 +327,93 @@ Notes:
 
 ## 5. Track import (RII-2 and sub-issues)
 
-Every supported format is parsed into one common in-memory shape before it touches the
-database:
+Decided with Miko 2026-09-26:
+
+- **Parsing happens in the browser**, not on the server. The raw file never leaves the
+  user's device; only the normalized points are sent (and, once `RII-3` adds
+  persistence, stored). The **original file is not stored** anywhere.
+- **Elevation and per-point time are kept** whenever the source has them — they're
+  stored, not just used for parsing.
+- Every format is parsed into one common in-memory shape; the map and the API only
+  ever see this shape, never a format-specific one. Adding a format = adding a parser.
 
 ```ts
+// src/tracks/types.ts
+type TrackPoint = {
+  lat: number
+  lng: number
+  elevationM?: number
+  recordedAt?: string // ISO 8601 UTC, e.g. "2026-09-18T12:39:14.357Z"
+}
+
 type ImportedTrack = {
-  points: Array<{ lat: number; lng: number; elevationM?: number; recordedAt?: string }>;
-  recordedDate?: string; // ISO date, best-effort from the source file
-};
+  name?: string           // from the file if it has one; UI falls back to the file name
+  sourceFormat: 'tcx' | 'gpx' | 'kml' | 'json'
+  segments: TrackPoint[][] // ≥1 segment, each ≥1 point; gaps between segments are
+                           // recording pauses and are not drawn as lines
+  recordedDate?: string    // "YYYY-MM-DD" of the first timestamped point, in the
+                           // browser's local timezone (a walk at 01:00 Finnish time
+                           // belongs to that Finnish date, not the previous UTC one)
+}
 ```
 
-- **GPX** (`RII-25`) — standard `<trkpt lat lon><ele><time>` parsing.
-- **KML** (`RII-15`) — `<coordinates>` in a `<LineString>`; KML has no native per-point
-  timestamp, so `recordedAt` may be absent.
-- **Google Fit** (`RII-16`) — format needs confirming (Google Takeout export) before
-  implementation; treat as a research spike first.
-- **Apple** (`RII-17`) — format needs confirming (Health export XML vs. GPX from a
-  third-party app) before implementation; treat as a research spike first.
+### Parser rules (all formats)
+
+- Implemented as pure functions `(fileText: string) => ImportedTrack` in
+  `src/tracks/parsers/`, using the browser's `DOMParser` for XML formats; matched by
+  element local name so namespace prefixes don't matter.
+- Points without a valid position are skipped (not an error). Latitude must be in
+  [-90, 90], longitude in [-180, 180], both finite. Invalid elevation or time on an
+  otherwise valid point drops just that field.
+- Empty segments are dropped. A file with **no valid points at all** fails with
+  "Tiedostossa ei ole sijaintitietoja." — never a silently-empty track.
+- Unparseable XML fails with "Tiedostoa ei voitu lukea – se ei ole kelvollinen
+  <MUOTO>-tiedosto."
+- Failures are thrown as `TrackParseError`, whose `message` is the Finnish,
+  user-visible text; anything else thrown is a bug and shows a generic Finnish error.
+
+### Formats
+
+- **TCX** (`RII-16`, implemented) — Garmin Training Center XML. This is what **Google
+  Fit's Takeout** export contains (`Fit/Activities/*.tcx`, one file per activity;
+  about half have GPS, the rest are step-only and get the "no location data" error).
+  Also covers Garmin exports. Every `<Track>` (inside each `<Lap>`, inside each
+  `<Activity>`) becomes one segment — in Google Fit exports each lap is a stretch of
+  movement and the gaps between laps are 2–8 minute pauses. Per `<Trackpoint>`:
+  `<Position><LatitudeDegrees>/<LongitudeDegrees>`, `<AltitudeMeters>`, `<Time>`.
+  Google Fit's older Takeout layout (`All Sessions` / `Kaikki harjoituskerrat` JSON)
+  has no location data, and its `All Data` location dumps aren't split per walk —
+  neither is supported.
+- **GPX** (`RII-25`) — `<trk>/<trkseg>/<trkpt lat lon><ele><time>`; each `<trkseg>` is
+  a segment. Also accept route files (`<rte>/<rtept>`, e.g. Sports Tracker's
+  "-route.gpx" export — same points, no times); each `<rte>` is a segment.
+- **KML** (`RII-15`) — `<LineString><coordinates>` ("lng,lat[,ele]" tuples, whitespace
+  separated; no per-point time). Sports Tracker exports this. Also `<gx:Track>` with
+  paired `<when>`/`<gx:coord>` if present (has times).
+- **Apple** (`RII-17`) — probably no new parser: Apple Health's `export.zip` stores
+  routes as GPX under `workout-routes/`. To confirm with a real export.
 - **JSON** (`RII-18`) — our own schema, essentially `ImportedTrack` serialized directly;
-  exact field names to be finalized when implemented, but should round-trip losslessly.
-- Malformed or unsupported files must fail with a user-visible error, never a crash or
-  a silently-empty track.
+  exact field names finalized when implemented, must round-trip losslessly.
+- Format is chosen by **file extension** (`.tcx`, `.gpx`, `.kml`, `.json`,
+  case-insensitive). Other extensions, or a format whose parser hasn't shipped yet,
+  fail with "Tiedostomuotoa ei tueta (<tiedosto>). Tuetut muodot: <lista>."
+
+### Import UI (`src/tracks/TrackImportControl.tsx`)
+
+- A "Tuo reittejä" button in the map's top-left corner, below the zoom control. Big
+  enough to tap on a phone.
+- Opens the OS file picker with **multiple selection**. The `<input type="file">`
+  deliberately has **no `accept` filter**: on Android and iOS, filters for extensions
+  without a well-known MIME type (`.tcx`, `.gpx`, `.kml`) grey out exactly the files
+  the user wants. Unsupported files are rejected per file after picking instead.
+- Each picked file is parsed independently — one bad file doesn't block the others.
+  A panel lists every file: its name, and either date + distance (km, summed within
+  segments) + point count, or its Finnish error message. Each row can be removed.
+- Successfully parsed tracks are drawn on the map as a **preview** (dashed orange
+  polylines, one polyline per segment) and the map fits to all previewed tracks.
+- Until persistence ships (`RII-3`), the preview is local-only: nothing is saved and
+  a page reload clears it. The panel says so ("Esikatselu – reittejä ei vielä
+  tallenneta."). `RII-3` adds the save step (login required) on top of this panel.
 
 ## 6. Map (RII-3, RII-5, RII-6)
 
