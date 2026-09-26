@@ -32,6 +32,7 @@ model User {
 
   sessions  Session[]
   sightings Sighting[]
+  tracks    Track[]
 
   @@map("users")
 }
@@ -104,4 +105,24 @@ model Sighting {
 
   @@index([observedDate])
   @@map("sightings")
+}
+
+// RII-3. Imported walking routes (parsed client-side from TCX/GPX/KML, see
+// docs/SPEC.md §5). The original file is never stored — only the points, all
+// of them in `segments` as one JSONB value (format and reasoning: SPEC.md §4
+// "Track geometry storage"). Import requires login, so ownerUserId is always
+// set on create; nullable + SET NULL mirrors sightings until RII-33 decides
+// what happens to a deleted account's tracks. Visibility is global for
+// logged-in users for now (RII-33).
+model Track {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  sourceFormat String    @map("source_format") // "tcx" | "gpx" | "kml" | "json"
+  ownerUserId  String?   @map("owner_user_id") @db.Uuid
+  owner        User?     @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  importedAt   DateTime  @default(now()) @map("imported_at") @db.Timestamptz
+  recordedDate DateTime? @map("recorded_date") @db.Date
+  segments     Json      @db.JsonB
+
+  @@map("tracks")
 }

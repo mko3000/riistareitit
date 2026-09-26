@@ -115,31 +115,41 @@ CREATE TABLE hunting_party_members (
   PRIMARY KEY (party_id, user_id)
 );
 
--- MVP: RII-2, RII-3 — imported walking routes
+-- MVP: RII-2, RII-3 — imported walking routes. Implemented in RII-3.
 CREATE TABLE tracks (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name            TEXT,
+  name            TEXT NOT NULL, -- from the file, else the file name (set by the client)
   source_format   TEXT NOT NULL, -- 'tcx' | 'gpx' | 'kml' | 'json' (the file format, not
                                  -- the app it came from: Google Fit exports are 'tcx')
-  owner_user_id   UUID REFERENCES users(id),      -- the logged-in uploader; import requires login
-  party_id        UUID REFERENCES hunting_parties(id), -- null until Post-MVP parties ship
+  owner_user_id   UUID REFERENCES users(id) ON DELETE SET NULL, -- the logged-in uploader;
+                                 -- import requires login. SET NULL mirrors sightings; what
+                                 -- happens to a deleted account's tracks is an open RII-33
+                                 -- question (no account deletion exists yet)
+  -- party_id     UUID REFERENCES hunting_parties(id) -- target shape, added with RII-10
   imported_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  recorded_date   DATE -- date the walk happened, from the source file if present
+  recorded_date   DATE, -- date the walk happened, from the source file if present
+  segments        JSONB NOT NULL -- the whole track, see "Track geometry storage" below
 );
 
-CREATE TABLE track_points (
-  id          BIGSERIAL PRIMARY KEY,
-  track_id    UUID NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
-  sequence    INTEGER NOT NULL,      -- order within the track (across all segments)
-  segment     INTEGER NOT NULL DEFAULT 0, -- 0-based; a new segment starts after a
-                                          -- recording pause, so the map doesn't draw a
-                                          -- straight line across the gap
-  lat         DOUBLE PRECISION NOT NULL,
-  lng         DOUBLE PRECISION NOT NULL,
-  elevation_m DOUBLE PRECISION,
-  recorded_at TIMESTAMPTZ           -- may be null if source has no per-point timestamps
-);
-CREATE INDEX ON track_points (track_id, sequence);
+-- Track geometry storage (RII-3, decided with Miko 2026-09-26): each track's
+-- points live in tracks.segments as one JSONB value, not one row per point:
+--   [ [ point, point, ... ], [ point, ... ] ]   -- array of segments; a new
+--                                              -- segment starts after a recording
+--                                              -- pause (not drawn across)
+--   point = [lat, lng]                          -- always
+--         | [lat, lng, elevationM]              -- trailing nulls trimmed
+--         | [lat, lng, elevationM | null, recordedAtEpochMs]
+-- Why: tracks are only ever written, read and deleted whole — never queried or
+-- edited per point — so a row per point cost chunked multi-row inserts, a sort +
+-- regroup on every read, and ~2x the storage, for query power nothing used. The
+-- spatial queries that *will* be needed (fog of war RII-13, "tracks in this map
+-- area") want per-track line geometry with a spatial index, which rows of points
+-- don't give either; the planned path is PostGIS (a geometry column per track),
+-- a one-off conversion from this JSON since tracks are immutable. PostGIS needs
+-- explicit sign-off (new extension, raw SQL alongside Prisma).
+-- Shipped first as a track_points table (migration 20260926103425_add_tracks),
+-- converted in 20260926120000_store_track_segments_as_json: data copied into
+-- tracks.segments, then track_points dropped.
 
 -- MVP: RII-4, RII-5, RII-20, RII-22 — species reference list
 CREATE TABLE species (
@@ -220,9 +230,10 @@ Notes:
   vs. private areas?) are **not designed yet**. `RII-33` tracks doing that design
   properly before real (non-testing) deployment; don't build filtering logic ad hoc in
   the meantime.
-- Fog of war (RII-13, Post-MVP) is computed from `track_points` coverage + `sightings`
-  density at render/query time, not stored as its own table — revisit if that proves
-  too slow at scale.
+- Fog of war (RII-13, Post-MVP) is computed from track coverage (`tracks.segments`,
+  likely via PostGIS — see "Track geometry storage") + `sightings` density at
+  render/query time, not stored as its own table — revisit if that proves too slow
+  at scale.
 
 ### Sightings API
 
@@ -422,15 +433,56 @@ type ImportedTrack = {
   segments) + point count, or its Finnish error message. Each row can be removed.
 - Successfully parsed tracks are drawn on the map as a **preview** (dashed orange
   polylines, one polyline per segment) and the map fits to all previewed tracks.
-- Until persistence ships (`RII-3`), the preview is local-only: nothing is saved and
-  a page reload clears it. The panel says so ("Esikatselu – reittejä ei vielä
-  tallenneta."). `RII-3` adds the save step (login required) on top of this panel.
+- **Saving** (`RII-3`): each parsed row has a "Tallenna" button, and with more than
+  one parsed row the panel also has "Tallenna kaikki" (saves every parsed, unsaved
+  row, one request per track, in order). The saved name is the file's own track name,
+  else the file name without its extension. Saving requires login: logged out, the save buttons are replaced by
+  "Kirjaudu sisään tallentaaksesi reitit." A saved row disappears from the panel and
+  its track moves from the dashed preview to the solid saved-tracks layer; a failed
+  save keeps the row and shows the Finnish error under it. Unsaved previews are still
+  local-only — a reload clears them.
+
+### Tracks API (`RII-3`)
+
+All three routes **require login** (`401` otherwise) — per Miko 2026-09-26: any
+logged-in user can add tracks and sees every track; visibility/privacy scoping is
+`RII-33`'s job. Logged-out visitors see no tracks at all (unlike sightings, which are
+currently public).
+
+- `GET /tracks` — every track, newest `recorded_date` first (then newest import):
+  `{ tracks: [{ id, name, sourceFormat, recordedDate, importedAt, owner: { id,
+  displayName } | null, segments: [[[lat, lng], ...], ...] }] }`. Points are sent as
+  compact `[lat, lng]` pairs — the map needs nothing else, and it keeps the payload
+  ~4× smaller. Elevation/time are stored but not returned (no consumer yet). Returns
+  all points of all tracks: fine at MVP scale (tens of tracks), will need viewport
+  filtering and/or simplification before hundreds — noted, not built.
+- `POST /tracks` — body is the `ImportedTrack` shape from §5 plus a required `name`:
+  `{ name, sourceFormat, recordedDate?, segments: TrackPoint[][] }`. Validated
+  server-side even though the client already parsed it: name 1–200 chars,
+  `sourceFormat` one of the four, `recordedDate` `"YYYY-MM-DD"` if present, ≥1
+  non-empty segment, **≤ 200,000 points** total, each point's lat/lng in range and
+  finite, `elevationM` finite if present, `recordedAt` a parseable timestamp if
+  present. `400 { error: 'invalid_input', message }` otherwise (one Finnish message,
+  not per-field — there's no form to attach field errors to). Owner = session user.
+  Stored as one row, the points converted to the compact `segments` JSONB format
+  (§4). Route-level `bodyLimit` of 25 MB (Fastify
+  defaults to 1 MB; the largest real Google Fit export tested was ~30k points ≈ 3 MB
+  of JSON). `201 { track }` in the same shape as a `GET` item.
+- `DELETE /tracks/:id` — **owner only** (`403` for anyone else; unlike sightings,
+  whose delete is unrestricted — a track is one person's recorded movement, so only
+  they remove it). `404` if it doesn't exist.
 
 ## 6. Map (RII-3, RII-5, RII-6)
 
 - Base layers: topographic and satellite, user-toggleable. Both must render tracks and
   sighting/kill markers identically on top.
-- Tracks render as polylines.
+- Tracks render as polylines, one per segment (`src/tracks/TracksLayer.tsx`). Saved
+  tracks: solid orange `#ea580c`, weight 4, drawn on a shared **canvas renderer**
+  (many long polylines are much cheaper on one canvas than as SVG paths). Import
+  previews: same orange, dashed. Orange keeps both clear of the blue/red sighting pins.
+- Tapping a saved track opens a popup: name, date, distance, who imported it, and
+  "Poista reitti" if it's your own (native `confirm()` first, as for sightings). A tap
+  on a track therefore doesn't start adding a sighting — tap beside the line instead.
 - Each sighting/kill renders as a marker: icon = species (`species.icon`), color =
   sighting vs. kill. Custom (non-preset) species get a fallback icon. Implemented in
   `RII-5`:

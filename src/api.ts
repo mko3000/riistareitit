@@ -1,3 +1,5 @@
+import type { ImportedTrack, TrackSourceFormat } from './tracks/types'
+
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 
 export interface PublicUser {
@@ -204,5 +206,66 @@ export async function deleteSighting(id: string): Promise<{ ok: true } | { ok: f
     return { ok: false, message: body?.message ?? 'Could not delete. Please try again.' }
   }
 
+  return { ok: true }
+}
+
+// RII-3. See docs/SPEC.md §5 "Tracks API". All routes require login.
+
+export interface PublicTrack {
+  id: string
+  name: string
+  sourceFormat: TrackSourceFormat
+  recordedDate: string | null // "YYYY-MM-DD"
+  importedAt: string
+  owner: { id: string; displayName: string } | null
+  segments: Array<Array<[number, number]>> // [lat, lng] pairs
+}
+
+// Resolves to [] on failure (including logged out), like getSightings.
+export async function getTracks(): Promise<PublicTrack[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/tracks`, { credentials: 'include' })
+    if (!response.ok) return []
+    const body = await response.json()
+    return body.tracks ?? []
+  } catch {
+    return []
+  }
+}
+
+export type CreateTrackResult = { ok: true; track: PublicTrack } | { ok: false; message: string }
+
+export async function createTrack(track: ImportedTrack & { name: string }): Promise<CreateTrackResult> {
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}/tracks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(track),
+    })
+  } catch {
+    return { ok: false, message: 'Palvelimeen ei saatu yhteyttä.' }
+  }
+
+  const body = await response.json().catch(() => null)
+  if (!response.ok) {
+    if (response.status === 413) return { ok: false, message: 'Reitti on liian suuri tallennettavaksi.' }
+    return { ok: false, message: body?.message ?? 'Tallennus epäonnistui. Yritä uudelleen.' }
+  }
+  return { ok: true, track: body.track }
+}
+
+export async function deleteTrack(id: string): Promise<{ ok: true } | { ok: false; message: string }> {
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}/tracks/${id}`, { method: 'DELETE', credentials: 'include' })
+  } catch {
+    return { ok: false, message: 'Palvelimeen ei saatu yhteyttä.' }
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    return { ok: false, message: body?.message ?? 'Poisto epäonnistui. Yritä uudelleen.' }
+  }
   return { ok: true }
 }

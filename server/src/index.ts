@@ -5,6 +5,7 @@ import { env } from './env.js'
 import { prisma } from './prisma.js'
 import authRoutes from './routes/auth.js'
 import sightingsRoutes from './routes/sightings.js'
+import tracksRoutes from './routes/tracks.js'
 
 const app = Fastify({ logger: true })
 
@@ -48,6 +49,7 @@ await app.register(cors, {
 await app.register(cookie)
 await app.register(authRoutes)
 await app.register(sightingsRoutes)
+await app.register(tracksRoutes)
 
 // Proves the API is up and can actually reach Postgres, not just that the
 // process is running.

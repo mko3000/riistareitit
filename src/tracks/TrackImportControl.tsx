@@ -1,28 +1,38 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Polyline, useMap } from 'react-leaflet'
 import L, { type LatLngTuple } from 'leaflet'
+import { createTrack, type PublicTrack, type PublicUser } from '../api'
+import { formatFinnishDate, formatKm } from './format'
 import { parseTrackFile } from './parseTrackFile'
 import { TrackParseError } from './parsers/common'
 import { trackDistanceM, trackPointCount } from './trackStats'
 import type { ImportedTrack } from './types'
 
-type ImportEntry =
-  | {
-      id: number
-      fileName: string
-      status: 'ok'
-      track: ImportedTrack
-      positions: LatLngTuple[][]
-      distanceM: number
-      pointCount: number
-    }
-  | { id: number; fileName: string; status: 'error'; message: string }
+type ParsedEntry = {
+  id: number
+  fileName: string
+  status: 'ok'
+  name: string // from the file, else the file name
+  track: ImportedTrack
+  positions: LatLngTuple[][]
+  distanceM: number
+  pointCount: number
+  saving: boolean
+  saveError: string | null
+}
 
-// Preview only: dashed so it reads as "not saved" once RII-3 draws saved
-// tracks solid. Orange to stay clear of the sighting (blue) / kill (red) pins.
+type ImportEntry = ParsedEntry | { id: number; fileName: string; status: 'error'; message: string }
+
+// Dashed so an unsaved preview reads differently from a saved (solid) track.
+// Orange to stay clear of the sighting (blue) / kill (red) pins.
 const PREVIEW_PATH_OPTIONS = { color: '#ea580c', weight: 4, dashArray: '6 8', interactive: false }
 
 let nextEntryId = 1
+
+function withoutExtension(fileName: string): string {
+  const dot = fileName.lastIndexOf('.')
+  return dot > 0 ? fileName.slice(0, dot) : fileName
+}
 
 async function parseFile(file: File): Promise<ImportEntry> {
   const id = nextEntryId++
@@ -32,10 +42,13 @@ async function parseFile(file: File): Promise<ImportEntry> {
       id,
       fileName: file.name,
       status: 'ok',
+      name: track.name ?? withoutExtension(file.name),
       track,
       positions: track.segments.map((segment) => segment.map((p): LatLngTuple => [p.lat, p.lng])),
       distanceM: trackDistanceM(track),
       pointCount: trackPointCount(track),
+      saving: false,
+      saveError: null,
     }
   } catch (err) {
     const message =
@@ -45,20 +58,17 @@ async function parseFile(file: File): Promise<ImportEntry> {
   }
 }
 
-function formatFinnishDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-').map(Number)
-  return `${day}.${month}.${year}`
-}
-
-function formatKm(meters: number): string {
-  return `${(meters / 1000).toFixed(1).replace('.', ',')} km`
+interface TrackImportControlProps {
+  user: PublicUser | null
+  onSaved: (track: PublicTrack) => void
 }
 
 // RII-16: pick track files (several at once), parse them in the browser and
-// preview them on the map. See docs/SPEC.md §5 "Import UI". Rendered inside
-// <MapContainer> for useMap(); the panel stops its own clicks from reaching
-// the map so they don't open the add-sighting popup.
-export function TrackImportControl() {
+// preview them on the map. RII-3: save them (login required). See
+// docs/SPEC.md §5 "Import UI". Rendered inside <MapContainer> for useMap();
+// the panel stops its own clicks from reaching the map so they don't open
+// the add-sighting popup.
+export function TrackImportControl({ user, onSaved }: TrackImportControlProps) {
   const map = useMap()
   const [entries, setEntries] = useState<ImportEntry[]>([])
   const [reading, setReading] = useState(false)
@@ -91,6 +101,33 @@ export function TrackImportControl() {
     setEntries((current) => current.filter((entry) => entry.id !== id))
   }
 
+  function updateParsed(id: number, patch: Partial<ParsedEntry>) {
+    setEntries((current) =>
+      current.map((entry) => (entry.id === id && entry.status === 'ok' ? { ...entry, ...patch } : entry)),
+    )
+  }
+
+  async function saveEntry(entry: ParsedEntry) {
+    updateParsed(entry.id, { saving: true, saveError: null })
+    const result = await createTrack({ ...entry.track, name: entry.name })
+    if (!result.ok) {
+      updateParsed(entry.id, { saving: false, saveError: result.message })
+      return
+    }
+    removeEntry(entry.id)
+    onSaved(result.track)
+  }
+
+  // One request per track, in order — keeps each request's body bounded and
+  // lets each row succeed or fail on its own.
+  async function saveAll() {
+    const unsaved = entries.filter((entry): entry is ParsedEntry => entry.status === 'ok' && !entry.saving)
+    for (const entry of unsaved) await saveEntry(entry)
+  }
+
+  const parsedCount = entries.filter((entry) => entry.status === 'ok').length
+  const anySaving = entries.some((entry) => entry.status === 'ok' && entry.saving)
+
   return (
     <>
       {entries.map((entry) =>
@@ -104,7 +141,9 @@ export function TrackImportControl() {
             files, since those have no well-known MIME type. Bad files are
             rejected per file after picking instead. */}
         <input ref={fileInputRef} type="file" multiple hidden onChange={handleFilesPicked} />
-        <button type="button" className="track-import-button"
+        <button
+          type="button"
+          className="track-import-button"
           disabled={reading}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -113,14 +152,12 @@ export function TrackImportControl() {
 
         {entries.length > 0 && (
           <div className="track-import-panel">
-            <p className="track-import-note">Esikatselu – reittejä ei vielä tallenneta.</p>
+            {!user && <p className="track-import-note">Kirjaudu sisään tallentaaksesi reitit.</p>}
             <ul className="track-import-list">
               {entries.map((entry) => (
                 <li key={entry.id} className={entry.status === 'error' ? 'track-import-error' : undefined}>
                   <div className="track-import-entry-text">
-                    <span className="track-import-name">
-                      {entry.status === 'ok' ? (entry.track.name ?? entry.fileName) : entry.fileName}
-                    </span>
+                    <span className="track-import-name">{entry.status === 'ok' ? entry.name : entry.fileName}</span>
                     {entry.status === 'ok' && (
                       <span>
                         {entry.track.recordedDate && `${formatFinnishDate(entry.track.recordedDate)} · `}
@@ -128,11 +165,23 @@ export function TrackImportControl() {
                       </span>
                     )}
                     {entry.status === 'error' && <span>{entry.message}</span>}
+                    {entry.status === 'ok' && entry.saveError && <span className="form-error">{entry.saveError}</span>}
+                    {entry.status === 'ok' && user && (
+                      <button
+                        type="button"
+                        className="track-save-button"
+                        disabled={entry.saving}
+                        onClick={() => saveEntry(entry)}
+                      >
+                        {entry.saving ? 'Tallennetaan…' : 'Tallenna'}
+                      </button>
+                    )}
                   </div>
                   <button
                     type="button"
                     className="icon-button"
                     aria-label={`Poista ${entry.fileName}`}
+                    disabled={entry.status === 'ok' && entry.saving}
                     onClick={() => removeEntry(entry.id)}
                   >
                     ✕
@@ -140,9 +189,16 @@ export function TrackImportControl() {
                 </li>
               ))}
             </ul>
-            <button type="button" className="link-button" onClick={() => setEntries([])}>
-              Tyhjennä kaikki
-            </button>
+            <div className="track-import-actions">
+              {user && parsedCount > 1 && (
+                <button type="button" className="track-save-button" disabled={anySaving} onClick={saveAll}>
+                  Tallenna kaikki
+                </button>
+              )}
+              <button type="button" className="link-button" disabled={anySaving} onClick={() => setEntries([])}>
+                Tyhjennä kaikki
+              </button>
+            </div>
           </div>
         )}
       </div>

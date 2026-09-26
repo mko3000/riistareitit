@@ -32,7 +32,7 @@ function isRecordNotFound(err: unknown): boolean {
 // explicitly with UTC getters rather than relying on default JSON
 // serialization, which would round-trip through the *local* timezone and
 // can shift the date/time by a day/hour depending on where the server runs.
-function formatDate(d: Date): string {
+export function formatDate(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
 }
 
