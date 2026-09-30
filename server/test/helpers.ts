@@ -12,7 +12,9 @@ export async function createTestApp(): Promise<FastifyInstance> {
 export async function resetDatabase(): Promise<void> {
   // Belt and braces on top of vitest.config.ts: never truncate a non-test DB.
   assertIsTestDatabase(process.env.DATABASE_URL)
-  await prisma.$executeRawUnsafe('TRUNCATE TABLE "sessions", "sightings", "tracks", "users" CASCADE')
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "sessions", "sightings", "tracks", "hunting_party_members", "hunting_parties", "users" CASCADE',
+  )
 }
 
 export interface TestUser {

@@ -131,8 +131,11 @@ CREATE TABLE sessions (
 );
 CREATE INDEX ON sessions (user_id);
 
--- (Post-MVP: RII-10) — hunting parties. Target shape designed in RII-33
--- (§9 "Visibility and hunting parties"); not implemented yet.
+-- (Post-MVP: RII-10) — hunting parties. Designed in RII-33 (§9 "Visibility and
+-- hunting parties"). Tables implemented in RII-42 (migration
+-- 20260930080527_add_hunting_parties, purely additive); no route uses them until
+-- RII-43/RII-44. The role CHECK below lives in the migration SQL (Prisma
+-- doesn't model CHECK constraints).
 CREATE TABLE hunting_parties (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name         TEXT NOT NULL,
@@ -145,7 +148,8 @@ CREATE TABLE hunting_parties (
 CREATE TABLE hunting_party_members (
   party_id  UUID NOT NULL REFERENCES hunting_parties(id) ON DELETE CASCADE,
   user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role      TEXT NOT NULL DEFAULT 'member', -- 'admin' | 'member' (party-level, unrelated to users.role)
+  role      TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'member')),
+                                            -- party-level, unrelated to users.role
   joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (party_id, user_id)
 );
@@ -161,8 +165,9 @@ CREATE TABLE tracks (
                                  -- import requires login. SET NULL mirrors sightings; what
                                  -- happens to a deleted account's tracks is an open RII-33
                                  -- question (no account deletion exists yet)
-  -- party_id     UUID REFERENCES hunting_parties(id) ON DELETE SET NULL
-  --              -- target shape (RII-33 design, §9), added with RII-10; NULL = private
+  party_id        UUID REFERENCES hunting_parties(id) ON DELETE SET NULL, -- RII-42;
+                                 -- NULL = private to the owner (§9); not read by any
+                                 -- route until RII-43
   imported_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   recorded_date   DATE, -- date the walk happened, from the source file if present
   segments        JSONB NOT NULL -- the whole track, see "Track geometry storage" below
@@ -214,21 +219,19 @@ CREATE TABLE sightings (
   created_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL, -- who was logged in when this was added; null if added anonymously
   observed_date       DATE NOT NULL,
   observed_time       TIME,
-  -- track_id and party_id below are the target shape, not yet implemented:
-  -- the tables they'd reference (tracks, hunting_parties) don't exist yet
-  -- (RII-2, RII-10). RII-20 ships without these two columns; they're added
-  -- via a follow-up migration once their target tables exist, rather than
-  -- as dangling/unconstrained UUIDs now.
+  -- track_id is still only a target shape (not implemented): link a sighting to
+  -- the walk it was made on. party_id was added by RII-42 once hunting_parties
+  -- existed (RII-20 shipped without both rather than as dangling UUIDs).
   -- track_id            UUID REFERENCES tracks(id),
-  -- party_id            UUID REFERENCES hunting_parties(id) ON DELETE SET NULL,
-  --                     -- (RII-33 design, §9) NULL = private to its creator
+  party_id            UUID REFERENCES hunting_parties(id) ON DELETE SET NULL, -- RII-42;
+                      -- NULL = private to its creator (§9); not read by any route until RII-43
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (species_id IS NOT NULL OR custom_species IS NOT NULL),
   CHECK (kind IN ('sighting', 'kill'))
 );
 CREATE INDEX ON sightings (observed_date);
--- CREATE INDEX ON sightings (party_id); -- once party_id exists, see above
+CREATE INDEX ON sightings (party_id); -- RII-42 (also on tracks.party_id)
 
 -- (Post-MVP: RII-11) — hunting area borders
 CREATE TABLE hunting_areas (
