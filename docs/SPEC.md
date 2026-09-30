@@ -798,8 +798,12 @@ developer-facing (§7); errors are told apart by `error` code.
 - `PATCH /parties/:id/members/:userId` `{ role: 'admin' | 'member' }` → `{ party }` —
   admin only. Demoting the last admin → `409 last_admin`. Any admin can promote or
   demote any member, including other admins.
-- Membership changes run in a transaction, so two simultaneous "leave" requests can't
-  both pass the last-admin check.
+- Membership changes (leave/remove, role change) run in a transaction that first locks
+  the party's row (`SELECT … FOR UPDATE`): a simultaneous change to the same party waits
+  for the first to commit and re-reads the members, so two admins leaving at once can't
+  both pass the last-admin check — the second gets `409`. (First built with
+  serializable transactions + retry, which leaked occasional `500`s in CI; changed in
+  `RII-46`'s PR.)
 
 ### UI
 
