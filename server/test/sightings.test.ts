@@ -1,8 +1,12 @@
 import type { FastifyInstance } from 'fastify'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { createTestApp, resetDatabase, signUpUser } from './helpers.js'
+import { createTestApp, resetDatabase, signUpUser, type TestUser } from './helpers.js'
+
+// Sighting CRUD and validation. Who can see/change what (RII-43) is covered
+// in visibility.test.ts; here everything happens as one logged-in user.
 
 let app: FastifyInstance
+let user: TestUser
 
 beforeAll(async () => {
   app = await createTestApp()
@@ -10,7 +14,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.close()
 })
-beforeEach(resetDatabase)
+beforeEach(async () => {
+  await resetDatabase()
+  user = await signUpUser(app, 'Miko')
+})
 
 const VALID_SIGHTING = {
   lat: 61.5,
@@ -23,8 +30,12 @@ const VALID_SIGHTING = {
   notes: '  Kaksi kukkoa  ',
 }
 
-function createSighting(payload: Record<string, unknown>, cookie?: string) {
-  return app.inject({ method: 'POST', url: '/sightings', payload, headers: cookie ? { cookie } : {} })
+function createSighting(payload: Record<string, unknown>) {
+  return app.inject({ method: 'POST', url: '/sightings', payload, headers: { cookie: user.cookie } })
+}
+
+function asUser(options: { method: 'GET' | 'PATCH' | 'DELETE'; url: string; payload?: Record<string, unknown> }) {
+  return app.inject({ ...options, headers: { cookie: user.cookie } })
 }
 
 describe('GET /species', () => {
@@ -59,13 +70,13 @@ describe('POST /sightings', () => {
     expect(response.json().sighting).toMatchObject({ species: null, customSpecies: 'Fasaani' })
   })
 
-  it("defaults personDisplay to the logged-in user's name, else 'unknown'", async () => {
-    const user = await signUpUser(app, 'Miko')
-    const loggedIn = await createSighting({ ...VALID_SIGHTING, personDisplay: undefined }, user.cookie)
-    expect(loggedIn.json().sighting.personDisplay).toBe('Miko')
-
-    const anonymous = await createSighting({ ...VALID_SIGHTING, personDisplay: undefined })
-    expect(anonymous.json().sighting.personDisplay).toBe('unknown')
+  it("defaults personDisplay to the logged-in user's name and records them as creator", async () => {
+    const response = await createSighting({ ...VALID_SIGHTING, personDisplay: undefined })
+    expect(response.json().sighting).toMatchObject({
+      personDisplay: 'Miko',
+      createdBy: { id: user.id, displayName: 'Miko' },
+      partyId: null,
+    })
   })
 
   it('returns per-field errors for invalid input', async () => {
@@ -102,7 +113,7 @@ describe('GET /sightings', () => {
     await createSighting(VALID_SIGHTING)
     await createSighting({ ...VALID_SIGHTING, kind: 'kill' })
 
-    const response = await app.inject({ method: 'GET', url: '/sightings' })
+    const response = await asUser({ method: 'GET', url: '/sightings' })
     expect(response.json().sightings.map((s: { kind: string }) => s.kind)).toEqual(['kill', 'sighting'])
   })
 })
@@ -111,7 +122,7 @@ describe('PATCH /sightings/:id', () => {
   it('replaces the editable fields, including a moved location', async () => {
     const created = (await createSighting(VALID_SIGHTING)).json().sighting
 
-    const response = await app.inject({
+    const response = await asUser({
       method: 'PATCH',
       url: `/sightings/${created.id}`,
       payload: { ...VALID_SIGHTING, lat: 62, lng: 24, kind: 'kill', speciesKey: 'hazel-grouse', observedTime: undefined },
@@ -129,7 +140,7 @@ describe('PATCH /sightings/:id', () => {
   })
 
   it('returns 404 for a sighting that no longer exists', async () => {
-    const response = await app.inject({
+    const response = await asUser({
       method: 'PATCH',
       url: '/sightings/00000000-0000-0000-0000-000000000000',
       payload: VALID_SIGHTING,
@@ -140,7 +151,7 @@ describe('PATCH /sightings/:id', () => {
 
   it('validates like create', async () => {
     const created = (await createSighting(VALID_SIGHTING)).json().sighting
-    const response = await app.inject({
+    const response = await asUser({
       method: 'PATCH',
       url: `/sightings/${created.id}`,
       payload: { ...VALID_SIGHTING, lat: -100 },
@@ -154,13 +165,13 @@ describe('DELETE /sightings/:id', () => {
   it('deletes the sighting, then 404s on a repeat', async () => {
     const created = (await createSighting(VALID_SIGHTING)).json().sighting
 
-    const first = await app.inject({ method: 'DELETE', url: `/sightings/${created.id}` })
+    const first = await asUser({ method: 'DELETE', url: `/sightings/${created.id}` })
     expect(first.statusCode).toBe(204)
 
-    const second = await app.inject({ method: 'DELETE', url: `/sightings/${created.id}` })
+    const second = await asUser({ method: 'DELETE', url: `/sightings/${created.id}` })
     expect(second.statusCode).toBe(404)
 
-    const list = await app.inject({ method: 'GET', url: '/sightings' })
+    const list = await asUser({ method: 'GET', url: '/sightings' })
     expect(list.json().sightings).toEqual([])
   })
 })

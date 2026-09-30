@@ -5,6 +5,7 @@ import { AuthBar } from './auth/AuthBar'
 import { BaseLayers } from './map/BaseLayers'
 import { SightingsLayer } from './sightings/SightingsLayer'
 import { TracksLayer } from './tracks/TracksLayer'
+import { t } from './i18n'
 
 // Roughly centers the initial view over Finland.
 const DEFAULT_CENTER: [number, number] = [64.5, 26.0]
@@ -33,8 +34,10 @@ function App() {
         <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="map">
           <BaseLayers />
           <TracksLayer user={user} barControls={barControls} />
-          <SightingsLayer />
+          <SightingsLayer user={user} />
         </MapContainer>
+        {/* RII-43: logged out, no sightings or tracks are visible or addable. */}
+        {!checkingSession && !user && <div className="login-notice">{t.map.loginToSeeData}</div>}
       </div>
     </div>
   )

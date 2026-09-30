@@ -15,6 +15,8 @@ export const fi = {
   },
 
   map: {
+    // RII-43: shown over the map when logged out — nothing is visible then.
+    loginToSeeData: 'Kirjaudu sisään nähdäksesi ja lisätäksesi havaintoja ja reittejä.',
     // Base layer names in the layers control (RII-6).
     topographic: 'Maastokartta',
     aerial: 'Ilmakuva',
@@ -69,6 +71,8 @@ export const fi = {
       saveFailed: 'Tallennus epäonnistui. Yritä uudelleen.',
       deleteFailed: 'Poisto epäonnistui. Yritä uudelleen.',
       notFound: 'Merkintää ei enää ole.',
+      notLoggedIn: 'Kirjaudu sisään lisätäksesi ja muokataksesi havaintoja.',
+      forbidden: 'Vain merkinnän lisääjä voi muokata tai poistaa sen.',
       fields: {
         lat: 'Virheellinen sijainti.',
         lng: 'Virheellinen sijainti.',
@@ -76,6 +80,7 @@ export const fi = {
         kind: 'Virheellinen tyyppi.',
         observedDate: 'Virheellinen päivämäärä.',
         observedTime: 'Virheellinen kellonaika.',
+        partyId: 'Valitse jokin omista porukoistasi.',
       },
     },
   },

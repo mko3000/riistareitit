@@ -259,20 +259,13 @@ Notes:
 - Editing/deleting a sighting is currently unrestricted — any user (or anonymous
   visitor) can edit/delete any entry, not just its creator. Deliberate MVP choice for
   a small trusted hunting-party context; `created_by_user_id` exists so this can be
-  locked down later without a schema change. **Now designed (`RII-33`, §9): creator
-  only**, implemented with hunting parties (`RII-10`).
+  locked down later without a schema change. **Since `RII-43`: creator only** (§9
+  rule 4); the text above describes the MVP state before that.
 - Only `lat`/`lng`, `species_id`-or-`custom_species`, and `observed_date` are `NOT NULL`
   on `sightings` — every other field can be filled in later (RII-23).
-- **Visibility is currently global and unfiltered — every sighting is visible to every
-  visitor, logged in or not.** This is an explicit, temporary testing shortcut, not the
-  intended behavior: hunters don't want to broadcast sightings to the world. The real
-  model is very likely party-scoped (see `party_id` above, already reserved for this),
-  roughly "if you're not in the party that owns this land/data, you don't see it" — but
-  the exact rules (parties-of-one? multiple parties? a user in no party at all? shared
-  vs. private areas?) are **now designed — see §9 "Visibility and hunting parties"
-  (`RII-33`)**; until `RII-10` implements it the global behavior stays. `RII-33` tracked doing that design
-  properly before real (non-testing) deployment; don't build filtering logic ad hoc in
-  the meantime.
+- **Visibility (since `RII-43`, design §9):** a logged-in user sees a sighting iff they
+  created it or they're a member of its party (`party_id`). Logged-out visitors see
+  none. Before `RII-43` every sighting was public — a deliberate MVP testing shortcut.
 - Fog of war (RII-13, Post-MVP) is computed from track coverage (`tracks.segments`,
   likely via PostGIS — see "Track geometry storage") + `sightings` density at
   render/query time, not stored as its own table — revisit if that proves too slow
@@ -307,10 +300,23 @@ Notes:
   `parseCommonFields()` helper `POST` already used, rather than duplicating it.
 - `DELETE /sightings/:id` — removes the row outright, no soft-delete. `404` if the id
   doesn't exist. Implemented in `RII-23`.
-- Editing/deleting is unrestricted — any visitor can edit/delete any entry, not just
-  its own creator. Deliberate MVP choice; see `created_by_user_id`'s note earlier in
-  this section for how that could be locked down later, and `RII-33` for the broader
-  visibility/privacy design.
+- **Access rules (since `RII-43`, §9 rules 1–4; shared helpers in
+  `server/src/visibility.ts`):**
+  - Every `/sightings` route requires login: `401 { error: 'not_logged_in' }`
+    otherwise. `GET /species` stays public (reference data, no location).
+  - `GET /sightings` returns only sightings the caller created or whose party they're
+    a member of — filtered in the database query, never in the UI.
+  - `POST`/`PATCH` accept `partyId`: one of the caller's party ids, or `null` for
+    private. Omitted on `POST` → private; omitted on `PATCH` → unchanged (the edit
+    form doesn't send it until the party picker, `RII-46`). A party the caller isn't
+    in → `400 invalid_input` with `fieldErrors.partyId`.
+  - `PATCH`/`DELETE /sightings/:id`: a sighting the caller can't see is `404` (same as
+    nonexistent — its existence isn't revealed); one they can see but didn't create
+    is `403 { error: 'forbidden' }`. Previously anyone could edit/delete anything.
+  - Responses include `partyId` and `createdBy` (`{ id, displayName }` or `null`), so
+    the UI can show the edit pencil only on your own sightings.
+  - Legacy anonymous sightings (no creator, no party) are visible to no one until the
+    `RII-47` script assigns them to an account.
 - **Global error handler** (`server/src/index.ts`): added after `RII-22` manual testing
   hit a raw Prisma stack trace surfacing directly in the browser (a missing migration —
   Fastify's default error handler echoes the thrown error's own message verbatim).
@@ -491,20 +497,22 @@ type ImportedTrack = {
 
 ### Tracks API (`RII-3`)
 
-All three routes **require login** (`401` otherwise) — per Miko 2026-09-26: any
-logged-in user can add tracks and sees every track; visibility/privacy scoping is
-`RII-33`'s job. Logged-out visitors see no tracks at all (unlike sightings, which are
-currently public).
+All three routes **require login** (`401` otherwise). **Visibility since `RII-43`**
+(§9): a user sees a track iff they own it or they're a member of its party
+(`party_id`) — same rule as sightings, filtered in the database query. (Until
+`RII-43`, per Miko 2026-09-26, every logged-in user saw every track.)
 
-- `GET /tracks` — every track, newest `recorded_date` first (then newest import):
+- `GET /tracks` — every track the caller can see, newest `recorded_date` first (then newest import):
   `{ tracks: [{ id, name, sourceFormat, recordedDate, importedAt, owner: { id,
-  displayName } | null, segments: [[[lat, lng], ...], ...] }] }`. Points are sent as
+  displayName } | null, partyId, segments: [[[lat, lng], ...], ...] }] }`. Points are sent as
   compact `[lat, lng]` pairs — the map needs nothing else, and it keeps the payload
   ~4× smaller. Elevation/time are stored but not returned (no consumer yet). Returns
   all points of all tracks: fine at MVP scale (tens of tracks), will need viewport
   filtering and/or simplification before hundreds — noted, not built.
 - `POST /tracks` — body is the `ImportedTrack` shape from §5 plus a required `name`:
-  `{ name, sourceFormat, recordedDate?, segments: TrackPoint[][] }`. Validated
+  `{ name, sourceFormat, recordedDate?, partyId?, segments: TrackPoint[][] }`
+  (`partyId`: one of the caller's parties or `null`/omitted = private; any other →
+  `400 invalid_input`). Validated
   server-side even though the client already parsed it: name 1–200 chars,
   `sourceFormat` one of the four, `recordedDate` `"YYYY-MM-DD"` if present, ≥1
   non-empty segment, **≤ 200,000 points** total, each point's lat/lng in range and
@@ -517,9 +525,10 @@ currently public).
   (§4). Route-level `bodyLimit` of 25 MB (Fastify
   defaults to 1 MB; the largest real Google Fit export tested was ~30k points ≈ 3 MB
   of JSON). `201 { track }` in the same shape as a `GET` item.
-- `DELETE /tracks/:id` — **owner only** (`403` for anyone else; unlike sightings,
-  whose delete is unrestricted — a track is one person's recorded movement, so only
-  they remove it). `404` if it doesn't exist.
+- `DELETE /tracks/:id` — **owner only**: `403` for a track the caller can see (via a
+  party) but doesn't own; `404` if it doesn't exist **or the caller can't see it**
+  (since `RII-43`, existence isn't revealed). Sightings follow the same rule since
+  `RII-43`.
 
 ### Map tiles API (`RII-6`)
 
@@ -650,10 +659,9 @@ currently public).
 
 ### Accounts API
 
-Login is currently **optional** app-wide (see `RII-8`) — nothing below requires an
-account; it only attributes data to a real name instead of "unknown" once you have
-one. **Changes with `RII-10`:** seeing or adding any sightings/tracks will require
-login (§9).
+Signing up and logging in themselves are open to anyone. **Since `RII-43`, seeing or
+adding any sightings/tracks requires login** (§9 rule 1); before that login was
+optional app-wide (`RII-8`) and only attributed data to a real name.
 
 - `POST /signup` — `{ email, displayName, password }` → `201` with the created user
   (never includes `passwordHash`) and sets the session cookie (signed in immediately,
@@ -692,10 +700,11 @@ one; don't let it stay a stub once work begins.
 
 ## 9. Visibility and hunting parties (RII-33 design, RII-10)
 
-**Status: design, decided with Miko 2026-09-30 (`RII-33`); merging the PR that added
-this section is Miko's sign-off. Not implemented yet** — `RII-10`'s sub-issues build
-it. Until then the current behavior stays: sightings global and public, tracks
-global to logged-in users.
+**Status:** design decided with Miko 2026-09-30 (`RII-33`, signed off by merging PR
+#66). Being built in `RII-10`'s sub-issues: tables (`RII-42`) ✅; **rules 1–4 enforced
+in the API (`RII-43`)** ✅ — the party management API, the UI for parties and the
+"Näkyy" picker come in `RII-44`–`RII-46`. Until `RII-46`, new items can only be
+created private (the UI doesn't send `partyId` yet).
 
 ### Rules
 

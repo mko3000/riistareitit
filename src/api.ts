@@ -125,6 +125,9 @@ export interface PublicSighting {
   kind: 'sighting' | 'kill'
   notes: string | null
   personDisplay: string
+  // RII-43: null = private to its creator.
+  partyId: string | null
+  createdBy: { id: string; displayName: string } | null
   observedDate: string // "YYYY-MM-DD"
   observedTime: string | null // "HH:MM"
   createdAt: string
@@ -156,7 +159,7 @@ export async function getSightings(): Promise<PublicSighting[]> {
 }
 
 export type SightingFieldErrors = Partial<
-  Record<'lat' | 'lng' | 'species' | 'kind' | 'observedDate' | 'observedTime', string>
+  Record<'lat' | 'lng' | 'species' | 'kind' | 'observedDate' | 'observedTime' | 'partyId', string>
 >
 
 export type CreateSightingResult =
@@ -192,6 +195,10 @@ async function sendSightingRequest(
         }
       case 'not_found':
         return { ok: false, message: t.sightings.errors.notFound }
+      case 'not_logged_in':
+        return { ok: false, message: t.sightings.errors.notLoggedIn }
+      case 'forbidden':
+        return { ok: false, message: t.sightings.errors.forbidden }
       default:
         return { ok: false, message: t.sightings.errors.saveFailed }
     }
@@ -241,10 +248,12 @@ export async function deleteSighting(id: string): Promise<{ ok: true } | { ok: f
 
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    return {
-      ok: false,
-      message: body?.error === 'not_found' ? t.sightings.errors.notFound : t.sightings.errors.deleteFailed,
+    const messages: Record<string, string> = {
+      not_found: t.sightings.errors.notFound,
+      not_logged_in: t.sightings.errors.notLoggedIn,
+      forbidden: t.sightings.errors.forbidden,
     }
+    return { ok: false, message: messages[body?.error] ?? t.sightings.errors.deleteFailed }
   }
 
   return { ok: true }

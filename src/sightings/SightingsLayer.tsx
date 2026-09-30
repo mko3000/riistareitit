@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Popup, useMapEvents } from 'react-leaflet'
 import type { Popup as LeafletPopup } from 'leaflet'
-import { getSightings, type PublicSighting } from '../api'
+import { getSightings, type PublicSighting, type PublicUser } from '../api'
 import { AddSightingForm } from './AddSightingForm'
 import { SightingMarker } from './SightingMarker'
 import { t } from '../i18n'
@@ -20,7 +20,13 @@ interface PendingMoveTarget {
 // RII-22/RII-23/RII-34. Rendered as a child of <MapContainer> (useMapEvents
 // only works inside the map's own React tree). Marker appearance
 // (species icon + sighting/kill color, RII-5) lives in speciesIcons.ts.
-export function SightingsLayer() {
+// RII-43: login required to see or add sightings — logged out, nothing is
+// shown and tapping the map does nothing (App shows a login prompt).
+interface SightingsLayerProps {
+  user: PublicUser | null
+}
+
+export function SightingsLayer({ user }: SightingsLayerProps) {
   const [sightings, setSightings] = useState<PublicSighting[]>([])
   const [pendingLocation, setPendingLocation] = useState<PendingLocation | null>(null)
   const addPopupRef = useRef<LeafletPopup>(null)
@@ -34,9 +40,20 @@ export function SightingsLayer() {
   const [movingSightingId, setMovingSightingId] = useState<string | null>(null)
   const [pendingMoveTarget, setPendingMoveTarget] = useState<PendingMoveTarget | null>(null)
 
+  // Reload whenever who's logged in changes: what you may see depends on it.
+  const userId = user?.id
   useEffect(() => {
-    getSightings().then(setSightings)
-  }, [])
+    if (!userId) return
+    let cancelled = false
+    getSightings().then((loaded) => {
+      if (!cancelled) setSightings(loaded)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  const visibleSightings = user ? sightings : []
 
   // RII-34: Escape backs out of "pick a new location" mode without
   // changing anything — the popup was already closed when Move was
@@ -52,6 +69,7 @@ export function SightingsLayer() {
 
   useMapEvents({
     click(event) {
+      if (!user) return
       if (movingSightingId) {
         setPendingMoveTarget({ sightingId: movingSightingId, lat: event.latlng.lat, lng: event.latlng.lng })
         setMovingSightingId(null)
@@ -85,8 +103,9 @@ export function SightingsLayer() {
         <div className="move-banner">{t.sightings.moveBanner}</div>
       )}
 
-      {sightings.map((sighting) => (
+      {visibleSightings.map((sighting) => (
         <SightingMarker
+          currentUserId={user?.id ?? null}
           key={sighting.id}
           sighting={sighting}
           onUpdated={handleUpdated}
@@ -97,7 +116,7 @@ export function SightingsLayer() {
         />
       ))}
 
-      {pendingLocation && (
+      {user && pendingLocation && (
         <Popup
           ref={addPopupRef}
           position={[pendingLocation.lat, pendingLocation.lng]}
