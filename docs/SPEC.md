@@ -315,8 +315,8 @@ Notes:
     is `403 { error: 'forbidden' }`. Previously anyone could edit/delete anything.
   - Responses include `partyId` and `createdBy` (`{ id, displayName }` or `null`), so
     the UI can show the edit pencil only on your own sightings.
-  - Legacy anonymous sightings (no creator, no party) are visible to no one until the
-    `RII-47` script assigns them to an account.
+  - Legacy anonymous sightings (no creator, no party) are visible to no one (the one
+    in the dev DB was assigned by hand, `RII-47`; see §9 "Migration of existing data").
 - **Global error handler** (`server/src/index.ts`): added after `RII-22` manual testing
   hit a raw Prisma stack trace surfacing directly in the browser (a missing migration —
   Fastify's default error handler echoes the thrown error's own message verbatim).
