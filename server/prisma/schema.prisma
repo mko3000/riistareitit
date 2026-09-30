@@ -30,9 +30,11 @@ model User {
   role         String   @default("member")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  sessions  Session[]
-  sightings Sighting[]
-  tracks    Track[]
+  sessions         Session[]
+  sightings        Sighting[]
+  tracks           Track[]
+  createdParties   HuntingParty[]
+  partyMemberships HuntingPartyMember[]
 
   @@map("users")
 }
@@ -87,23 +89,28 @@ model Species {
 // for the not-yet-resolved party-scoped privacy design this needs before
 // real (non-testing) use.
 model Sighting {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   lat             Float
   lng             Float
-  speciesId       String?   @map("species_id") @db.Uuid
-  species         Species?  @relation(fields: [speciesId], references: [id])
-  customSpecies   String?   @map("custom_species")
-  kind            String    @default("sighting") // "sighting" | "kill"
+  speciesId       String?       @map("species_id") @db.Uuid
+  species         Species?      @relation(fields: [speciesId], references: [id])
+  customSpecies   String?       @map("custom_species")
+  kind            String        @default("sighting") // "sighting" | "kill"
   notes           String?
-  personDisplay   String    @default("unknown") @map("person_display")
-  createdByUserId String?   @map("created_by_user_id") @db.Uuid
-  createdBy       User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
-  observedDate    DateTime  @map("observed_date") @db.Date
-  observedTime    DateTime? @map("observed_time") @db.Time
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  personDisplay   String        @default("unknown") @map("person_display")
+  createdByUserId String?       @map("created_by_user_id") @db.Uuid
+  createdBy       User?         @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  observedDate    DateTime      @map("observed_date") @db.Date
+  observedTime    DateTime?     @map("observed_time") @db.Time
+  // RII-42 (design: docs/SPEC.md §9). Null = private to its creator. Not
+  // read by any route yet — visibility is enforced from RII-43 on.
+  partyId         String?       @map("party_id") @db.Uuid
+  party           HuntingParty? @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([observedDate])
+  @@index([partyId])
   @@map("sightings")
 }
 
@@ -115,14 +122,53 @@ model Sighting {
 // what happens to a deleted account's tracks. Visibility is global for
 // logged-in users for now (RII-33).
 model Track {
-  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name         String
-  sourceFormat String    @map("source_format") // "tcx" | "gpx" | "kml" | "json"
-  ownerUserId  String?   @map("owner_user_id") @db.Uuid
-  owner        User?     @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
-  importedAt   DateTime  @default(now()) @map("imported_at") @db.Timestamptz
-  recordedDate DateTime? @map("recorded_date") @db.Date
-  segments     Json      @db.JsonB
+  sourceFormat String        @map("source_format") // "tcx" | "gpx" | "kml" | "json"
+  ownerUserId  String?       @map("owner_user_id") @db.Uuid
+  owner        User?         @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  importedAt   DateTime      @default(now()) @map("imported_at") @db.Timestamptz
+  recordedDate DateTime?     @map("recorded_date") @db.Date
+  segments     Json          @db.JsonB
+  // RII-42 (design: docs/SPEC.md §9). Null = private to its owner. Not read
+  // by any route yet — visibility is enforced from RII-43 on.
+  partyId      String?       @map("party_id") @db.Uuid
+  party        HuntingParty? @relation(fields: [partyId], references: [id], onDelete: SetNull)
 
+  @@index([partyId])
   @@map("tracks")
+}
+
+// RII-42 / RII-10: hunting parties. Rules (roles, invite codes, what members
+// see) are in docs/SPEC.md §9 "Visibility and hunting parties" (RII-33).
+// Deleting a party never deletes sightings or tracks: their partyId is set
+// to null, making them private to their creators.
+model HuntingParty {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  createdById String?  @map("created_by") @db.Uuid
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  // Current join code (random, URL-safe). Null = joining disabled;
+  // regenerating it revokes old links.
+  inviteCode  String?  @unique @map("invite_code")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  members   HuntingPartyMember[]
+  sightings Sighting[]
+  tracks    Track[]
+
+  @@map("hunting_parties")
+}
+
+model HuntingPartyMember {
+  partyId  String       @map("party_id") @db.Uuid
+  party    HuntingParty @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  userId   String       @map("user_id") @db.Uuid
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String       @default("member") // "admin" | "member" — party-level, unrelated to User.role
+  joinedAt DateTime     @default(now()) @map("joined_at") @db.Timestamptz
+
+  @@id([partyId, userId])
+  @@index([userId])
+  @@map("hunting_party_members")
 }
