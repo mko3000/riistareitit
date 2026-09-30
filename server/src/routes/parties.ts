@@ -23,19 +23,23 @@ function parseName(value: unknown): string | null {
   return name && name.length <= MAX_NAME_LENGTH ? name : null
 }
 
-// Membership changes run as serializable transactions so two simultaneous
-// requests can't both pass the last-admin check. Postgres then aborts one of
-// them with a serialization failure (Prisma P2034); retrying it re-runs the
-// checks against the now-committed state, giving a proper 409 instead of a 500.
-async function serializable<T>(work: (tx: Tx) => Promise<T>): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await prisma.$transaction(work, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
-    } catch (err) {
-      const conflict = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034'
-      if (!conflict || attempt >= 3) throw err
-    }
-  }
+// Membership changes (leave/remove, role change) run in a transaction that
+// first locks the party's row (SELECT … FOR UPDATE). A second simultaneous
+// change to the same party waits for the first to commit, then re-reads the
+// committed members — so two admins leaving at once can't both pass the
+// last-admin check, and the loser gets a clean 409. (Replaces serializable
+// transactions + retry, which still leaked occasional 500s in CI on
+// serialization errors Prisma didn't report as P2034.) Returns 'not_found'
+// if the party doesn't exist (or the id is malformed).
+async function withPartyLocked<T>(partyId: string, work: (tx: Tx) => Promise<T>): Promise<T | 'not_found'> {
+  return prisma.$transaction(async (tx) => {
+    const locked = await tx
+      .$queryRaw<Array<{ id: string }>>`SELECT id FROM hunting_parties WHERE id = ${partyId}::uuid FOR UPDATE`
+      // A malformed id can't be a party.
+      .catch(() => [])
+    if (locked.length === 0) return 'not_found' as const
+    return work(tx)
+  })
 }
 
 function notFound(reply: FastifyReply) {
@@ -228,7 +232,7 @@ export default async function partiesRoutes(app: FastifyInstance) {
     if (!user) return reply
     const { id, userId } = request.params as { id: string; userId: string }
 
-    const outcome = await serializable(async (tx) => {
+    const outcome = await withPartyLocked(id, async (tx) => {
       const mine = await membershipOf(id, user.id, tx)
       if (!mine) return 'not_found' as const
       const isSelf = userId === user.id
@@ -265,7 +269,7 @@ export default async function partiesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'invalid_input', message: "Role must be 'admin' or 'member'." })
     }
 
-    const outcome = await serializable(async (tx) => {
+    const outcome = await withPartyLocked(id, async (tx) => {
       const mine = await membershipOf(id, user.id, tx)
       if (!mine) return 'not_found' as const
       if (mine.role !== 'admin') return 'forbidden' as const
