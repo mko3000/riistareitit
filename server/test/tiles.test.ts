@@ -25,7 +25,8 @@ const PARIS = { z: 10, x: 518, y: 352 }
 const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])
 
 function stubMml(response: () => Response) {
-  const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => response())
+  // Typed as fetch so mock.calls carries (url, init) for the assertions below.
+  const fetchMock = vi.fn<typeof fetch>(async () => response())
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
 }
