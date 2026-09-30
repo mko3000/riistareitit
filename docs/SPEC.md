@@ -529,9 +529,10 @@ currently public).
   the key (`401`/`403`) → `502 tiles_unavailable` and a server log line naming the key
   as the likely cause; other MML errors or a timeout (10 s) → `502 tiles_unavailable`.
 - No login required, so the map works for logged-out visitors like before.
-  **Open before deployment:** that makes the route an open proxy to MML with our key
-  for anyone who can reach the server — acceptable while the app isn't public;
-  decide login-gating and/or rate limiting when hosting is decided.
+  That makes the route an open proxy to MML with our key for anyone who can reach
+  the server — acceptable while the app isn't public. **Decided (Miko 2026-09-30):**
+  require login for the MML layers before public deployment, logged-out visitors
+  get OpenStreetMap — tracked in `RII-41`.
 - Tests (`server/test/tiles.test.ts`) stub `fetch`, so they never call MML; the test
   config sets a fake `MML_API_KEY`.
 
@@ -667,8 +668,8 @@ one; don't let it stay a stub once work begins.
 - ~~ORM/migration tool~~ — resolved: Prisma, pinned to 6.x for Node 20 compatibility
   (`RII-27`).
 - ~~Map tile provider for topo + satellite layers~~ — resolved: MML open WMTS, proxied
-  through the server (`RII-6`, §3, §6). Open follow-up before deployment: the proxy
-  is open to anyone who can reach the server (see "Map tiles API").
+  through the server (`RII-6`, §3, §6). Follow-up before deployment: require login
+  for the tile proxy (`RII-41`, see "Map tiles API").
 - Hosting/deployment target.
 - Admin role's actual capabilities (`RII-9`).
 - Hunting party invite flow: open-add vs. accept-required (`RII-10`).
