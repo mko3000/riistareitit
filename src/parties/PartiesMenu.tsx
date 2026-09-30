@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { partiesApi, type PartySummary, type PublicUser } from '../api'
 import { t } from '../i18n'
+import { parseInviteInput } from './inviteLink'
 import { PartyDetailView } from './PartyDetailView'
 
 interface PartiesMenuProps {
@@ -20,6 +21,7 @@ export function PartiesMenu({ user, onMembershipChanged, membershipVersion }: Pa
   const [parties, setParties] = useState<PartySummary[] | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
+  const [joinInput, setJoinInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -57,6 +59,28 @@ export function PartiesMenu({ user, onMembershipChanged, membershipVersion }: Pa
     }
     setNewName('')
     setError(null)
+    await loadParties()
+    setSelectedId(result.value.id)
+  }
+
+  // "Liity porukkaan": accepts the bare code or the whole invite link.
+  async function handleJoin(event: FormEvent) {
+    event.preventDefault()
+    const code = parseInviteInput(joinInput)
+    if (!code) {
+      setError(t.parties.joinInvalidInput)
+      return
+    }
+    setBusy(true)
+    const result = await partiesApi.join(code)
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+    setJoinInput('')
+    setError(null)
+    onMembershipChanged()
     await loadParties()
     setSelectedId(result.value.id)
   }
@@ -124,6 +148,26 @@ export function PartiesMenu({ user, onMembershipChanged, membershipVersion }: Pa
                   ))}
                 </ul>
               )}
+
+              <form className="parties-create" onSubmit={handleJoin}>
+                <label htmlFor="join-party-code">{t.parties.joinLabel}</label>
+                <div className="parties-row">
+                  <input
+                    id="join-party-code"
+                    type="text"
+                    value={joinInput}
+                    placeholder={t.parties.joinPlaceholder}
+                    autoComplete="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    onChange={(event) => setJoinInput(event.target.value)}
+                  />
+                  <button type="submit" disabled={busy || !joinInput.trim()}>
+                    {t.parties.join.joinButton}
+                  </button>
+                </div>
+                <p className="parties-muted">{t.parties.joinHelp}</p>
+              </form>
 
               <form className="parties-create" onSubmit={handleCreate}>
                 <label htmlFor="new-party-name">{t.parties.newPartyLabel}</label>

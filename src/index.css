@@ -504,3 +504,9 @@ body,
 .join-dialog p {
   margin: 0;
 }
+
+.invite-code {
+  font-family: monospace;
+  overflow-wrap: anywhere;
+  user-select: all; /* one tap selects the whole code */
+}

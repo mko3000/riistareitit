@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { buildInviteLink, readInviteCode, removeInviteCodeFromUrl } from './inviteLink'
+import { buildInviteLink, parseInviteInput, readInviteCode, removeInviteCodeFromUrl } from './inviteLink'
 
 afterEach(() => {
   window.history.replaceState(null, '', '/')
@@ -28,5 +28,29 @@ describe('invite links', () => {
     removeInviteCodeFromUrl()
     expect(window.location.search).toBe('?x=1')
     expect(window.location.hash).toBe('#kartta')
+  })
+})
+
+describe('parseInviteInput', () => {
+  const code = 'YuZedrHMjei8kBArifIRSQ'
+
+  it('accepts the bare code, trimmed', () => {
+    expect(parseInviteInput(`  ${code}\n`)).toBe(code)
+  })
+
+  it('accepts the whole link, from any host', () => {
+    expect(parseInviteInput(`http://localhost:5173/?liity=${code}`)).toBe(code)
+    expect(parseInviteInput(`https://riistareitit.fi/?foo=1&liity=${code}#kartta`)).toBe(code)
+  })
+
+  it('tolerates punctuation copied from a chat message', () => {
+    expect(parseInviteInput(`https://riistareitit.fi/?liity=${code}.`)).toBe(code)
+  })
+
+  it('rejects things that are not a code', () => {
+    expect(parseInviteInput('')).toBeNull()
+    expect(parseInviteInput('liity porukkaan')).toBeNull()
+    expect(parseInviteInput('abc')).toBeNull()
+    expect(parseInviteInput('https://riistareitit.fi/?liity=')).toBeNull()
   })
 })

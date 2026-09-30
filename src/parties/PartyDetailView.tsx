@@ -19,7 +19,8 @@ export function PartyDetailView({ partyId, user, onChanged, onLeftOrDeleted }: P
   const [nameDraft, setNameDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [copied, setCopied] = useState(false)
+  // Which of the two copy buttons just copied, for its "Kopioitu!" label.
+  const [copied, setCopied] = useState<'link' | 'code' | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -69,12 +70,13 @@ export function PartyDetailView({ partyId, user, onChanged, onLeftOrDeleted }: P
     }
   }
 
-  async function handleCopy() {
-    if (!inviteLink) return
+  async function handleCopy(what: 'link' | 'code') {
+    const text = what === 'link' ? inviteLink : party?.inviteCode
+    if (!text) return
     try {
-      await navigator.clipboard.writeText(inviteLink)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(text)
+      setCopied(what)
+      setTimeout(() => setCopied(null), 2000)
     } catch {
       setError(t.parties.errors.failed)
     }
@@ -180,8 +182,8 @@ export function PartyDetailView({ partyId, user, onChanged, onLeftOrDeleted }: P
               <p className="parties-muted">{t.parties.inviteHelp}</p>
               <input type="text" readOnly value={inviteLink} aria-label={t.parties.inviteLink} onFocus={(e) => e.target.select()} />
               <div className="parties-row">
-                <button type="button" onClick={handleCopy}>
-                  {copied ? t.parties.copied : t.parties.copy}
+                <button type="button" onClick={() => handleCopy('link')}>
+                  {copied === 'link' ? t.parties.copied : t.parties.copy}
                 </button>
                 {'share' in navigator && (
                   <button type="button" onClick={handleShare}>
@@ -190,6 +192,14 @@ export function PartyDetailView({ partyId, user, onChanged, onLeftOrDeleted }: P
                 )}
                 <button type="button" disabled={busy} onClick={handleNewLink}>
                   {t.parties.newLink}
+                </button>
+              </div>
+              <p className="parties-muted">
+                {t.parties.inviteCode}: <code className="invite-code">{party.inviteCode}</code>
+              </p>
+              <div className="parties-row">
+                <button type="button" onClick={() => handleCopy('code')}>
+                  {copied === 'code' ? t.parties.copied : t.parties.copyCode}
                 </button>
               </div>
               <button type="button" className="link-button" disabled={busy} onClick={handleDisableLink}>

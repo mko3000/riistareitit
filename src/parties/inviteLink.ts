@@ -20,3 +20,20 @@ export function removeInviteCodeFromUrl(): void {
   url.searchParams.delete(PARAM)
   window.history.replaceState(window.history.state, '', url.toString())
 }
+
+// What people paste into "Liity porukkaan": the bare code, or the whole link
+// (possibly with extra whitespace or a trailing slash/period from a chat
+// message). Returns the code, or null if it doesn't look like one. Codes are
+// base64url (letters, digits, - and _).
+const CODE_RE = /^[A-Za-z0-9_-]{8,64}$/
+const LINK_CODE_RE = new RegExp(`[?&]${PARAM}=([A-Za-z0-9_-]+)`)
+
+export function parseInviteInput(text: string): string | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+  // Only the code's own characters are taken, so a trailing "&x=1", "#…",
+  // or punctuation from a chat message falls away by itself.
+  const fromLink = trimmed.match(LINK_CODE_RE)?.[1]
+  const candidate = fromLink ?? trimmed.replace(/[.,;!?]+$/, '')
+  return CODE_RE.test(candidate) ? candidate : null
+}

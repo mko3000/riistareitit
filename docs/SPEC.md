@@ -801,10 +801,15 @@ developer-facing (§7); errors are told apart by `error` code.
 
 - **Parties menu (`RII-45`, `src/parties/`)**: a **"Porukat"** button in the top bar
   (logged in only) opens a panel under the bar, like the login dropdown:
-  - List of my parties (name, my role, member count) and a **"Uusi porukka"** form.
+  - List of my parties (name, my role, member count), a **"Uusi porukka"** form, and a
+    **"Liity porukkaan"** field (added on Miko's request 2026-09-30 — clearer than only
+    opening a link): paste either the invite **code** or the whole **link**; the code
+    is extracted (`parseInviteInput` in `src/parties/inviteLink.ts`) and joined
+    directly (`POST /invites/:code/join`), then the new party opens.
   - Opening a party shows its members and, by role:
     - **Admin:** rename; invite link with **Kopioi** (clipboard) and, where the
-      browser supports it (phones), **Jaa** (the OS share sheet); **Uusi linkki**
+      browser supports it (phones), **Jaa** (the OS share sheet); the bare **code**
+      shown too, with **Kopioi koodi**, for pasting into "Liity porukkaan"; **Uusi linkki**
       (regenerate, with `confirm()` since old links stop working) and **Poista linkki
       käytöstä** (disable); per member: make admin/member, remove; **Poista porukka**
       (with `confirm()`).
@@ -815,7 +820,9 @@ developer-facing (§7); errors are told apart by `error` code.
   Logged out, it says to log in or create an account first (via the top bar) and
   then continues automatically. Joining (or closing the dialog) removes `?liity=`
   from the address bar (`history.replaceState`), so a reload doesn't reopen it.
-  Unknown/disabled link → a Finnish error in the same dialog.
+  Unknown/disabled link → a Finnish error in the same dialog ("Kutsulinkki on
+  vanhentunut tai virheellinen…"), also used by the "Liity porukkaan" field — not the
+  generic "Porukkaa ei löytynyt".
 - After joining, leaving, or deleting a party, the map's sightings and tracks reload
   (what you may see just changed).
 - **"Näkyy" picker (`RII-46`)**: add-sighting form and import panel — my parties +

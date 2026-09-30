@@ -375,6 +375,8 @@ async function partyRequest<T>(
   path: string,
   pick: (body: Record<string, unknown>) => T,
   payload?: unknown,
+  // Per-call wording for specific error codes (e.g. an invite's 404).
+  overrides: Record<string, string> = {},
 ): Promise<PartyResult<T>> {
   let response: Response
   try {
@@ -396,6 +398,7 @@ async function partyRequest<T>(
       forbidden: t.parties.errors.forbidden,
       last_admin: t.parties.errors.lastAdmin,
       invalid_input: t.parties.errors.invalidName,
+      ...overrides,
     }
     return { ok: false, message: messages[body?.error] ?? t.parties.errors.failed }
   }
@@ -415,9 +418,13 @@ export const partiesApi = {
     partyRequest('POST', `/parties/${id}/invite-code`, (b) => b.inviteCode as string),
   disableInviteCode: (id: string) => partyRequest('DELETE', `/parties/${id}/invite-code`, nothing),
   getInvite: (code: string) =>
-    partyRequest('GET', `/invites/${encodeURIComponent(code)}`, (b) => b.invite as PartyInvite),
+    partyRequest('GET', `/invites/${encodeURIComponent(code)}`, (b) => b.invite as PartyInvite, undefined, {
+      not_found: t.parties.join.invalid,
+    }),
   join: (code: string) =>
-    partyRequest('POST', `/invites/${encodeURIComponent(code)}/join`, (b) => b.party as PartySummary),
+    partyRequest('POST', `/invites/${encodeURIComponent(code)}/join`, (b) => b.party as PartySummary, undefined, {
+      not_found: t.parties.join.invalid,
+    }),
   removeMember: (id: string, userId: string) => partyRequest('DELETE', `/parties/${id}/members/${userId}`, nothing),
   setMemberRole: (id: string, userId: string, role: PartyRole) =>
     partyRequest('PATCH', `/parties/${id}/members/${userId}`, pickParty, { role }),
