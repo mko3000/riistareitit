@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Polyline, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import { getTracks, type PublicTrack, type PublicUser } from '../api'
+import { joinShortGaps } from './gapJoining'
 import { SavedTrackPopup } from './SavedTrackPopup'
 import { TrackImportControl } from './TrackImportControl'
 
@@ -45,6 +46,10 @@ export function TracksLayer({ user, barControls }: TracksLayerProps) {
 
   const visibleTracks = user ? tracks : []
 
+  // RII-38: what's drawn per track — short gaps joined, long ones left out.
+  // Computed once per track list, not on every render.
+  const drawnLines = useMemo(() => new Map(tracks.map((track) => [track.id, joinShortGaps(track.segments)])), [tracks])
+
   function handleSaved(track: PublicTrack) {
     setTracks((current) => [track, ...current])
   }
@@ -56,9 +61,14 @@ export function TracksLayer({ user, barControls }: TracksLayerProps) {
   return (
     <>
       {visibleTracks.map((track) => (
-        <Polyline key={track.id} positions={track.segments} pathOptions={pathOptions}>
+        <Polyline key={track.id} positions={drawnLines.get(track.id) ?? []} pathOptions={pathOptions}>
           <Popup>
-            <SavedTrackPopup track={track} user={user} onDeleted={handleDeleted} />
+            <SavedTrackPopup
+              track={track}
+              drawnLines={drawnLines.get(track.id) ?? []}
+              user={user}
+              onDeleted={handleDeleted}
+            />
           </Popup>
         </Polyline>
       ))}

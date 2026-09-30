@@ -6,7 +6,8 @@ import { createTrack, type PublicTrack, type PublicUser } from '../api'
 import { formatFinnishDate, formatKm } from './format'
 import { parseTrackFile } from './parseTrackFile'
 import { TrackParseError } from './parsers/common'
-import { trackDistanceM, trackPointCount } from './trackStats'
+import { joinShortGaps } from './gapJoining'
+import { pathDistanceM, toLatLngPairs, trackPointCount } from './trackStats'
 import type { ImportedTrack } from './types'
 import { t } from '../i18n'
 
@@ -16,7 +17,7 @@ type ParsedEntry = {
   status: 'ok'
   name: string // from the file, else the file name
   track: ImportedTrack
-  positions: LatLngTuple[][]
+  positions: LatLngTuple[][] // as drawn: short gaps joined (RII-38)
   distanceM: number
   pointCount: number
   saving: boolean
@@ -40,14 +41,15 @@ async function parseFile(file: File): Promise<ImportEntry> {
   const id = nextEntryId++
   try {
     const track = parseTrackFile(file.name, await file.text())
+    const positions = joinShortGaps(toLatLngPairs(track))
     return {
       id,
       fileName: file.name,
       status: 'ok',
       name: track.name ?? withoutExtension(file.name),
       track,
-      positions: track.segments.map((segment) => segment.map((p): LatLngTuple => [p.lat, p.lng])),
-      distanceM: trackDistanceM(track),
+      positions,
+      distanceM: pathDistanceM(positions),
       pointCount: trackPointCount(track),
       saving: false,
       saveError: null,

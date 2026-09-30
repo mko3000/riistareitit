@@ -166,7 +166,8 @@ CREATE TABLE tracks (
 -- points live in tracks.segments as one JSONB value, not one row per point:
 --   [ [ point, point, ... ], [ point, ... ] ]   -- array of segments; a new
 --                                              -- segment starts after a recording
---                                              -- pause (not drawn across)
+--                                              -- pause (joined when drawn only if
+--                                              -- short, see §6 "Gap joining")
 --   point = [lat, lng]                          -- always
 --         | [lat, lng, elevationM]              -- trailing nulls trimmed
 --         | [lat, lng, elevationM | null, recordedAtEpochMs]
@@ -392,7 +393,8 @@ type ImportedTrack = {
   name?: string           // from the file if it has one; UI falls back to the file name
   sourceFormat: 'tcx' | 'gpx' | 'kml' | 'json'
   segments: TrackPoint[][] // ≥1 segment, each ≥1 point; gaps between segments are
-                           // recording pauses and are not drawn as lines
+                           // recording pauses — kept as-is in storage; only short
+                           // ones are joined when drawn (§6 "Gap joining")
   recordedDate?: string    // "YYYY-MM-DD" of the first timestamped point, in the
                            // browser's local timezone (a walk at 01:00 Finnish time
                            // belongs to that Finnish date, not the previous UTC one)
@@ -463,8 +465,8 @@ type ImportedTrack = {
   without a well-known MIME type (`.tcx`, `.gpx`, `.kml`) grey out exactly the files
   the user wants. Unsupported files are rejected per file after picking instead.
 - Each picked file is parsed independently — one bad file doesn't block the others.
-  A panel lists every file: its name, and either date + distance (km, summed within
-  segments) + point count, or its Finnish error message. Each row can be removed.
+  A panel lists every file: its name, and either date + distance (km, of the line
+  as drawn — see §6 "Gap joining") + point count, or its Finnish error message. Each row can be removed.
 - Successfully parsed tracks are drawn on the map as a **preview** (dashed orange
   polylines, one polyline per segment) and the map fits to all previewed tracks.
 - **Saving** (`RII-3`): each parsed row has a "Tallenna" button, and with more than
@@ -551,7 +553,20 @@ currently public).
   `localStorage` (`riistareitit.baseLayer`), falling back to Maastokartta.
   Tracks (canvas renderer) and sighting/kill markers are separate panes above every
   base layer, so they render identically on all three.
-- Tracks render as polylines, one per segment (`src/tracks/TracksLayer.tsx`). Saved
+- **Gap joining** (`RII-38`, `src/tracks/gapJoining.ts`): when a track is drawn,
+  consecutive segments whose gap — straight-line distance from the last point of one
+  to the first point of the next — is **≤ 500 m** (`MAX_JOINED_GAP_M`) are drawn as
+  one continuous line; longer gaps are **not drawn at all** (no dotted connector —
+  a straight line across kilometres nobody walked would misrepresent coverage, the
+  app's core purpose). Rendering only: stored segments are unchanged, so the
+  threshold can be tuned any time. Distance shown (import panel, track popup) is the
+  length of the line as drawn, so joined gaps count and unjoined ones don't.
+  Why 500 m (measured on Miko's Google Fit export, 2026-09-30, 1,501 gaps in 768
+  walks with pauses): it joins 76% of gaps and makes 63% of those walks one
+  continuous line (300 m: 66% / 52%; 1 km: 87% / 77% but many more km-long straight
+  lines). No time limit on gaps for now.
+- Tracks render as polylines, one per drawn run of joined segments
+  (`src/tracks/TracksLayer.tsx`). Saved
   tracks: solid orange `#ea580c`, weight 4, drawn on a shared **canvas renderer**
   (many long polylines are much cheaper on one canvas than as SVG paths). Import
   previews: same orange, dashed. Orange keeps both clear of the blue/red sighting pins.

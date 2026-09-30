@@ -1,22 +1,25 @@
-import type { ImportedTrack, TrackPoint } from './types'
+import { joinShortGaps } from './gapJoining'
+import { distanceM, type LatLngPair } from './geo'
+import type { ImportedTrack } from './types'
 
-const EARTH_RADIUS_M = 6371008.8
-
-function haversineM(a: TrackPoint, b: TrackPoint): number {
-  const toRad = (deg: number) => (deg * Math.PI) / 180
-  const dLat = toRad(b.lat - a.lat)
-  const dLng = toRad(b.lng - a.lng)
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h))
-}
-
-// Summed within segments only — the jump across a pause isn't walked distance.
-export function trackDistanceM(track: ImportedTrack): number {
+// Length of the given lines, summed within each line only — never across
+// from one line to the next.
+export function pathDistanceM(lines: LatLngPair[][]): number {
   let total = 0
-  for (const segment of track.segments) {
-    for (let i = 1; i < segment.length; i++) total += haversineM(segment[i - 1], segment[i])
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i++) total += distanceM(line[i - 1], line[i])
   }
   return total
+}
+
+export function toLatLngPairs(track: ImportedTrack): LatLngPair[][] {
+  return track.segments.map((segment) => segment.map((point): LatLngPair => [point.lat, point.lng]))
+}
+
+// RII-38: distance of the track as drawn — short gaps joined (so they count),
+// long gaps left out (so they don't). Keeps the number and the line in agreement.
+export function trackDistanceM(track: ImportedTrack): number {
+  return pathDistanceM(joinShortGaps(toLatLngPairs(track)))
 }
 
 export function trackPointCount(track: ImportedTrack): number {
