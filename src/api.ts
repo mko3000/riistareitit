@@ -3,6 +3,12 @@ import type { ImportedTrack, TrackSourceFormat } from './tracks/types'
 
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 
+// RII-6: URL template for a base map tile proxied through our server (the
+// server adds MML's API key). {z}/{x}/{y} are filled in by Leaflet.
+export function mmlTileUrlTemplate(layer: 'maastokartta' | 'ortokuva'): string {
+  return `${API_BASE_URL}/tiles/${layer}/{z}/{x}/{y}`
+}
+
 // RII-7: the UI never shows the server's own `message` (English, for
 // developers). User-facing text is picked here from the response's `error`
 // code, and for `invalid_input` from which fields are in `fieldErrors`.
