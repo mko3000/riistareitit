@@ -24,9 +24,11 @@ interface PendingMoveTarget {
 // shown and tapping the map does nothing (App shows a login prompt).
 interface SightingsLayerProps {
   user: PublicUser | null
+  // Changes when party membership changes (RII-45) — reload what's visible.
+  reloadKey: number
 }
 
-export function SightingsLayer({ user }: SightingsLayerProps) {
+export function SightingsLayer({ user, reloadKey }: SightingsLayerProps) {
   const [sightings, setSightings] = useState<PublicSighting[]>([])
   const [pendingLocation, setPendingLocation] = useState<PendingLocation | null>(null)
   const addPopupRef = useRef<LeafletPopup>(null)
@@ -51,7 +53,7 @@ export function SightingsLayer({ user }: SightingsLayerProps) {
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, reloadKey])
 
   const visibleSightings = user ? sightings : []
 

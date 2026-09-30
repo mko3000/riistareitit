@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { MapContainer } from 'react-leaflet'
 import { getMe, type PublicUser } from './api'
 import { AuthBar } from './auth/AuthBar'
 import { BaseLayers } from './map/BaseLayers'
+import { JoinPartyDialog } from './parties/JoinPartyDialog'
+import { PartiesMenu } from './parties/PartiesMenu'
 import { SightingsLayer } from './sightings/SightingsLayer'
 import { TracksLayer } from './tracks/TracksLayer'
 import { t } from './i18n'
@@ -18,6 +21,10 @@ function App() {
   // portal their buttons into it. State (not a ref) so they re-render once
   // the element exists.
   const [barControls, setBarControls] = useState<HTMLDivElement | null>(null)
+  // RII-45: bumped after joining/leaving/deleting a party — what the map may
+  // show changed, so sightings and tracks reload (and an open parties list).
+  const [membershipVersion, setMembershipVersion] = useState(0)
+  const bumpMembership = () => setMembershipVersion((version) => version + 1)
 
   // RII-30's acceptance criterion: session (and now the UI reflecting it)
   // persists across a reload.
@@ -33,12 +40,19 @@ function App() {
       <div className="map-area">
         <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="map">
           <BaseLayers />
-          <TracksLayer user={user} barControls={barControls} />
-          <SightingsLayer user={user} />
+          <TracksLayer user={user} barControls={barControls} reloadKey={membershipVersion} />
+          <SightingsLayer user={user} reloadKey={membershipVersion} />
         </MapContainer>
         {/* RII-43: logged out, no sightings or tracks are visible or addable. */}
         {!checkingSession && !user && <div className="login-notice">{t.map.loginToSeeData}</div>}
+        <JoinPartyDialog user={user} checkingSession={checkingSession} onJoined={bumpMembership} />
       </div>
+      {user &&
+        barControls &&
+        createPortal(
+          <PartiesMenu user={user} onMembershipChanged={bumpMembership} membershipVersion={membershipVersion} />,
+          barControls,
+        )}
     </div>
   )
 }

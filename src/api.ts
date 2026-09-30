@@ -334,3 +334,91 @@ export async function deleteTrack(id: string): Promise<{ ok: true } | { ok: fals
   }
   return { ok: true }
 }
+
+// RII-44/RII-45: hunting parties. See docs/SPEC.md §9 "Party API".
+
+export type PartyRole = 'admin' | 'member'
+
+export interface PartySummary {
+  id: string
+  name: string
+  myRole: PartyRole | null
+  memberCount: number
+}
+
+export interface PartyMember {
+  userId: string
+  displayName: string
+  role: PartyRole
+  joinedAt: string
+}
+
+export interface PartyDetail {
+  id: string
+  name: string
+  myRole: PartyRole | null
+  inviteCode: string | null // null for non-admins, or when joining is disabled
+  members: PartyMember[]
+}
+
+export interface PartyInvite {
+  partyId: string
+  partyName: string
+  memberCount: number
+  alreadyMember: boolean
+}
+
+export type PartyResult<T> = { ok: true; value: T } | { ok: false; message: string }
+
+async function partyRequest<T>(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  pick: (body: Record<string, unknown>) => T,
+  payload?: unknown,
+): Promise<PartyResult<T>> {
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      credentials: 'include',
+      ...(payload !== undefined
+        ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
+        : {}),
+    })
+  } catch {
+    return { ok: false, message: t.common.serverUnreachable }
+  }
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const messages: Record<string, string> = {
+      not_logged_in: t.map.loginToSeeData,
+      not_found: t.parties.errors.notFound,
+      forbidden: t.parties.errors.forbidden,
+      last_admin: t.parties.errors.lastAdmin,
+      invalid_input: t.parties.errors.invalidName,
+    }
+    return { ok: false, message: messages[body?.error] ?? t.parties.errors.failed }
+  }
+  return { ok: true, value: pick(body ?? {}) }
+}
+
+const pickParty = (body: Record<string, unknown>) => body.party as PartyDetail
+const nothing = () => undefined
+
+export const partiesApi = {
+  list: () => partyRequest('GET', '/parties', (b) => b.parties as PartySummary[]),
+  create: (name: string) => partyRequest('POST', '/parties', pickParty, { name }),
+  get: (id: string) => partyRequest('GET', `/parties/${id}`, pickParty),
+  rename: (id: string, name: string) => partyRequest('PATCH', `/parties/${id}`, pickParty, { name }),
+  remove: (id: string) => partyRequest('DELETE', `/parties/${id}`, nothing),
+  regenerateInviteCode: (id: string) =>
+    partyRequest('POST', `/parties/${id}/invite-code`, (b) => b.inviteCode as string),
+  disableInviteCode: (id: string) => partyRequest('DELETE', `/parties/${id}/invite-code`, nothing),
+  getInvite: (code: string) =>
+    partyRequest('GET', `/invites/${encodeURIComponent(code)}`, (b) => b.invite as PartyInvite),
+  join: (code: string) =>
+    partyRequest('POST', `/invites/${encodeURIComponent(code)}/join`, (b) => b.party as PartySummary),
+  removeMember: (id: string, userId: string) => partyRequest('DELETE', `/parties/${id}/members/${userId}`, nothing),
+  setMemberRole: (id: string, userId: string, role: PartyRole) =>
+    partyRequest('PATCH', `/parties/${id}/members/${userId}`, pickParty, { role }),
+}

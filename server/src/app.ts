@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.js'
 import sightingsRoutes from './routes/sightings.js'
 import tracksRoutes from './routes/tracks.js'
 import tilesRoutes from './routes/tiles.js'
+import partiesRoutes from './routes/parties.js'
 
 // RII-36: builds the fully configured app without listening, so route tests
 // can drive it in-process with app.inject(). src/index.ts builds it and
@@ -56,6 +57,7 @@ export async function buildApp(options: { logger?: boolean } = {}) {
   await app.register(sightingsRoutes)
   await app.register(tracksRoutes)
   await app.register(tilesRoutes)
+  await app.register(partiesRoutes)
 
   // Proves the API is up and can actually reach Postgres, not just that the
   // process is running.
