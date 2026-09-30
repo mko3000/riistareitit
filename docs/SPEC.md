@@ -495,6 +495,33 @@ type ImportedTrack = {
   save keeps the row and shows the Finnish error under it. Unsaved previews are still
   local-only — a reload clears them.
 
+### Direct import from accounts (`RII-35`, research only)
+
+**Status:** researched 2026-09-30, **not implemented**. File import stays the only
+path. Any account linking needs OAuth and stored third-party tokens, which is the
+auth/tokens hard boundary in `CLAUDE.md`, so it needs explicit sign-off first.
+
+- **Google Fit REST API:** closed to new developers since 2024-05-01 and shut down
+  at the end of 2026. Not an option.
+- **Health Connect:** Google's replacement on Android keeps the data **on the
+  phone**. Only a native Android app can read it, not a web app or a server.
+- **Google Health API** (the new server-side API, successor to the Fitbit Web API):
+  it can return an exercise's route as **TCX** (`exportExerciseTcx`), which our
+  TCX parser already reads. Blockers today:
+  - **no new projects are being onboarded**;
+  - every scope is **Restricted**, including a separate location scope for routes,
+    so it needs Google's privacy and security review;
+  - the docs don't say whether walks the phone recorded (as Google Fit did) are
+    included, or only Fitbit and Pixel Watch data.
+- **Strava API:** available now, and activity `latlng` streams give the route. A
+  new app is limited to **one athlete** (the developer) until Strava approves more.
+  That is fine for a personal trial, not for a hunting party. Overlaps with `RII-19`.
+- **Recommendation:** don't build Google linking now. Revisit when the Google Health
+  API opens to new projects, and check then that phone-recorded walks are included.
+  Meanwhile, make file import easier on the phone (`RII-37`), e.g. record walks in
+  an app that exports GPX/KML directly (Sports Tracker, Strava) and share the file
+  to Riistareitit.
+
 ### Tracks API (`RII-3`)
 
 All three routes **require login** (`401` otherwise). **Visibility since `RII-43`**
@@ -707,8 +734,8 @@ one; don't let it stay a stub once work begins.
 **Status:** design decided with Miko 2026-09-30 (`RII-33`, signed off by merging PR
 #66). Being built in `RII-10`'s sub-issues: tables (`RII-42`) ✅; **rules 1–4 enforced
 in the API (`RII-43`)** ✅; **party management API and UI (`RII-44`, `RII-45`)** ✅;
-**"Näkyy" picker (`RII-46`)** ✅ — only the one-off legacy-sightings script (`RII-47`)
-remains.
+**"Näkyy" picker (`RII-46`)** ✅. Done — the legacy-sightings script (`RII-47`) was
+dropped, see "Migration of existing data".
 
 ### Rules
 
@@ -861,9 +888,9 @@ developer-facing (§7); errors are told apart by `error` code.
 
 - Existing sightings and tracks get `party_id = NULL` — **private to their creator**.
 - Existing sightings with **no creator** (added anonymously while that was allowed)
-  would become visible to no one. A one-off, manually run script assigns them to a
-  given user (Miko's account) — a script rather than a migration, because it names a
-  specific account.
+  would become visible to no one. The dev database had exactly one (a test sighting);
+  it was assigned to Miko's account once on 2026-09-30 and the script was not kept
+  (`RII-47` canceled). Production starts empty.
 
 ### Implementation order (sub-issues of `RII-10`)
 
@@ -875,7 +902,7 @@ developer-facing (§7); errors are told apart by `error` code.
 4. UI: party menu + management, join-by-link screen.
 5. UI: "Näkyy" picker in the add/edit sighting form and import panel; party shown in
    popups; logged-out empty-map state.
-6. One-off script for anonymous legacy sightings.
+6. ~~One-off script for anonymous legacy sightings~~ — dropped, fixed once in the dev DB (`RII-47`).
 
 ## 10. Open questions / assumptions to confirm
 
