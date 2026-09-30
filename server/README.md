@@ -50,6 +50,21 @@ They never touch the dev database or read `server/.env`, and refuse to run again
 database whose name doesn't end in `_test`. Point them elsewhere with
 `TEST_DATABASE_URL`. `npm run typecheck` type-checks the tests too (Vitest doesn't).
 
+## One-off: give anonymous old sightings an owner
+
+Sightings added without logging in, before login became required (`RII-43`), have no
+creator, so nobody can see them any more. This assigns them to one account, where they
+become private to that account:
+
+```sh
+npm run assign-orphan-sightings -- you@example.com
+```
+
+It shows which database it's connected to, lists the sightings it found, and asks
+`y/N` before changing anything (`--yes` skips the question). An unknown email is
+refused. Running it again is safe: it finds nothing and changes nothing. It uses the
+same `DATABASE_URL` as the server (`server/.env`).
+
 ## Other scripts
 
 - `npm run build` / `npm run start` — compile and run the production build.

@@ -863,7 +863,17 @@ developer-facing (§7); errors are told apart by `error` code.
 - Existing sightings with **no creator** (added anonymously while that was allowed)
   would become visible to no one. A one-off, manually run script assigns them to a
   given user (Miko's account) — a script rather than a migration, because it names a
-  specific account.
+  specific account. **Implemented in `RII-47`:**
+  `npm run assign-orphan-sightings -- <email> [--yes]` in `server/`
+  (`server/scripts/assign-orphan-sightings.ts`, logic in
+  `server/src/maintenance/assignOrphanSightings.ts`). It prints the database it's
+  connected to (host and name, never the password), looks the account up by email
+  (lowercased, like login — unknown → exit code 1, nothing changed), lists the
+  anonymous sightings (date, species, kind), and asks `y/N` before assigning them
+  (`--yes` skips the question). It sets only `created_by_user_id`; party, person name
+  and everything else stay as they were, so the sightings become private to that
+  account. Idempotent: a second run finds nothing and changes nothing. Uses whatever
+  `DATABASE_URL` the server uses (`server/.env`); run by Miko, not by CI or agents.
 
 ### Implementation order (sub-issues of `RII-10`)
 

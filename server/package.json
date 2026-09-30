@@ -13,7 +13,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.test.json"
+    "typecheck": "tsc -p tsconfig.test.json",
+    "assign-orphan-sightings": "tsx scripts/assign-orphan-sightings.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
