@@ -5,12 +5,15 @@ import {
   createSighting,
   getMe,
   getSpecies,
+  type PartySummary,
   type PublicSighting,
   type Species,
   type SightingFieldErrors,
 } from '../api'
 import { nowRoundedTo30Min, todayIsoDate } from './dateTime'
 import { SightingFieldsFieldset, OTHER, type Kind } from './SightingFieldsFieldset'
+import { VisibilityPicker } from '../parties/VisibilityPicker'
+import { readDefaultVisibility, storeDefaultVisibility, type Visibility } from '../parties/visibility'
 import { t } from '../i18n'
 
 interface AddSightingFormProps {
@@ -23,6 +26,8 @@ interface AddSightingFormProps {
   // (e.g. "Other" species revealing a text input) without calling
   // popupRef.current.update() ourselves.
   popupRef: RefObject<LeafletPopup | null>
+  // RII-46: for the "Näkyy" picker.
+  myParties: PartySummary[]
 }
 
 // RII-22: the popup form opened by tapping the map. Rendered inside a
@@ -30,7 +35,7 @@ interface AddSightingFormProps {
 // right) is the ticket's cancel action; nothing custom needed for that.
 // Field rendering itself lives in SightingFieldsFieldset, shared with
 // RII-23's edit mode.
-export function AddSightingForm({ lat, lng, onCreated, popupRef }: AddSightingFormProps) {
+export function AddSightingForm({ lat, lng, onCreated, popupRef, myParties }: AddSightingFormProps) {
   const [speciesList, setSpeciesList] = useState<Species[]>([])
   const [kind, setKind] = useState<Kind>('sighting')
   const [selectedSpecies, setSelectedSpecies] = useState<string | null>(null)
@@ -40,6 +45,10 @@ export function AddSightingForm({ lat, lng, onCreated, popupRef }: AddSightingFo
   const [date, setDate] = useState(todayIsoDate)
   const [time, setTime] = useState(nowRoundedTo30Min)
   const [notes, setNotes] = useState('')
+  // RII-46: defaults to the last choice, if still one of my parties.
+  const [visibility, setVisibility] = useState<Visibility>(() =>
+    readDefaultVisibility(myParties.map((party) => party.id)),
+  )
   const [fieldErrors, setFieldErrors] = useState<SightingFieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -75,6 +84,7 @@ export function AddSightingForm({ lat, lng, onCreated, popupRef }: AddSightingFo
       personDisplay,
       observedDate: date,
       observedTime: time,
+      partyId: visibility,
     })
 
     setSubmitting(false)
@@ -85,6 +95,7 @@ export function AddSightingForm({ lat, lng, onCreated, popupRef }: AddSightingFo
       return
     }
 
+    storeDefaultVisibility(visibility)
     onCreated(result.sighting)
   }
 
@@ -114,6 +125,8 @@ export function AddSightingForm({ lat, lng, onCreated, popupRef }: AddSightingFo
         onNotesChange={setNotes}
         fieldErrors={fieldErrors}
       />
+
+      <VisibilityPicker parties={myParties} value={visibility} onChange={setVisibility} />
 
       {formError && <p className="form-error">{formError}</p>}
 

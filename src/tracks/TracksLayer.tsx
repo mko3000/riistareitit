@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Polyline, Popup } from 'react-leaflet'
 import L from 'leaflet'
-import { getTracks, type PublicTrack, type PublicUser } from '../api'
+import { getTracks, type PartySummary, type PublicTrack, type PublicUser } from '../api'
 import { joinShortGaps } from './gapJoining'
 import { SavedTrackPopup } from './SavedTrackPopup'
 import { TrackImportControl } from './TrackImportControl'
@@ -11,12 +11,14 @@ interface TracksLayerProps {
   barControls: HTMLElement | null
   // Changes when party membership changes (RII-45) — reload what's visible.
   reloadKey: number
+  // RII-46: for the "Näkyy" pickers and popup labels.
+  myParties: PartySummary[]
 }
 
 // RII-3: saved tracks (solid) + the import control with its previews
 // (dashed). Tracks are login-only, so logged out this shows no tracks. See
 // docs/SPEC.md §5/§6.
-export function TracksLayer({ user, barControls, reloadKey }: TracksLayerProps) {
+export function TracksLayer({ user, barControls, reloadKey, myParties }: TracksLayerProps) {
   const [tracks, setTracks] = useState<PublicTrack[]>([])
 
   // One canvas for all saved tracks — much cheaper than an SVG path per
@@ -56,6 +58,10 @@ export function TracksLayer({ user, barControls, reloadKey }: TracksLayerProps) 
     setTracks((current) => [track, ...current])
   }
 
+  function handleUpdated(updated: PublicTrack) {
+    setTracks((current) => current.map((track) => (track.id === updated.id ? updated : track)))
+  }
+
   function handleDeleted(id: string) {
     setTracks((current) => current.filter((track) => track.id !== id))
   }
@@ -69,12 +75,14 @@ export function TracksLayer({ user, barControls, reloadKey }: TracksLayerProps) 
               track={track}
               drawnLines={drawnLines.get(track.id) ?? []}
               user={user}
+              myParties={myParties}
+              onUpdated={handleUpdated}
               onDeleted={handleDeleted}
             />
           </Popup>
         </Polyline>
       ))}
-      <TrackImportControl user={user} onSaved={handleSaved} barControls={barControls} />
+      <TrackImportControl user={user} onSaved={handleSaved} barControls={barControls} myParties={myParties} />
     </>
   )
 }

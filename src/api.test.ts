@@ -82,7 +82,7 @@ describe('API error localization', () => {
   })
 
   it('maps track errors, including an oversized track', async () => {
-    const track = { name: 'x', sourceFormat: 'gpx' as const, segments: [[{ lat: 60, lng: 25 }]] }
+    const track = { name: 'x', sourceFormat: 'gpx' as const, segments: [[{ lat: 60, lng: 25 }]], partyId: null }
     respondWith(400, { error: 'too_many_points', message: 'Track has more than 200000 points.' })
     expect(await createTrack(track)).toEqual({ ok: false, message: 'Reitti on liian suuri tallennettavaksi.' })
 
@@ -90,7 +90,7 @@ describe('API error localization', () => {
     expect(await createTrack(track)).toEqual({ ok: false, message: 'Reitti on liian suuri tallennettavaksi.' })
 
     respondWith(403, { error: 'forbidden', message: 'Only the track owner can delete it.' })
-    expect(await deleteTrack('id')).toEqual({ ok: false, message: 'Voit poistaa vain omia reittejäsi.' })
+    expect(await deleteTrack('id')).toEqual({ ok: false, message: 'Vain reitin tuoja voi muokata tai poistaa sen.' })
   })
 
   it('reports an unreachable server in Finnish', async () => {

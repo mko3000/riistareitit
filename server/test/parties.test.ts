@@ -255,7 +255,7 @@ describe('members and roles', () => {
       call(bob, 'DELETE', `/parties/${party.id}/members/${bob.id}`),
     ])
 
-    // One succeeds; the other is retried after the conflict and refused.
+    // The party row lock makes the second wait for the first, then refuse.
     expect(results.map((r) => r.statusCode).sort()).toEqual([204, 409])
     expect(await prisma.huntingPartyMember.count({ where: { partyId: party.id, role: 'admin' } })).toBe(1)
   })

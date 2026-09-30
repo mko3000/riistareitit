@@ -6,6 +6,7 @@ import { AuthBar } from './auth/AuthBar'
 import { BaseLayers } from './map/BaseLayers'
 import { JoinPartyDialog } from './parties/JoinPartyDialog'
 import { PartiesMenu } from './parties/PartiesMenu'
+import { useMyParties } from './parties/useMyParties'
 import { SightingsLayer } from './sightings/SightingsLayer'
 import { TracksLayer } from './tracks/TracksLayer'
 import { t } from './i18n'
@@ -25,6 +26,8 @@ function App() {
   // show changed, so sightings and tracks reload (and an open parties list).
   const [membershipVersion, setMembershipVersion] = useState(0)
   const bumpMembership = () => setMembershipVersion((version) => version + 1)
+  // RII-46: for the "Näkyy" pickers and popup labels.
+  const myParties = useMyParties(user?.id, membershipVersion)
 
   // RII-30's acceptance criterion: session (and now the UI reflecting it)
   // persists across a reload.
@@ -40,8 +43,8 @@ function App() {
       <div className="map-area">
         <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="map">
           <BaseLayers />
-          <TracksLayer user={user} barControls={barControls} reloadKey={membershipVersion} />
-          <SightingsLayer user={user} reloadKey={membershipVersion} />
+          <TracksLayer user={user} barControls={barControls} reloadKey={membershipVersion} myParties={myParties} />
+          <SightingsLayer user={user} reloadKey={membershipVersion} myParties={myParties} />
         </MapContainer>
         {/* RII-43: logged out, no sightings or tracks are visible or addable. */}
         {!checkingSession && !user && <div className="login-notice">{t.map.loginToSeeData}</div>}

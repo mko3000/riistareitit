@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Marker, Popup, useMap } from 'react-leaflet'
 import type { Popup as LeafletPopup } from 'leaflet'
-import type { PublicSighting } from '../api'
+import type { PartySummary, PublicSighting } from '../api'
 import { SightingDetailPopup } from './SightingDetailPopup'
 import { markerIconFor } from './speciesIcons'
 
@@ -14,6 +14,8 @@ interface SightingMarkerProps {
   sighting: PublicSighting
   // RII-43: only the creator may edit/move/delete (the server enforces it).
   currentUserId: string | null
+  // RII-46: for the popup's "Näkyy" label and picker.
+  myParties: PartySummary[]
   onUpdated: (sighting: PublicSighting) => void
   onDeleted: (id: string) => void
   onStartMove: (sightingId: string) => void
@@ -36,6 +38,7 @@ interface SightingMarkerProps {
 export function SightingMarker({
   sighting,
   currentUserId,
+  myParties,
   onUpdated,
   onDeleted,
   onStartMove,
@@ -116,6 +119,7 @@ export function SightingMarker({
         <SightingDetailPopup
           sighting={sighting}
           canEdit={currentUserId !== null && sighting.createdBy?.id === currentUserId}
+          myParties={myParties}
           currentPosition={currentPosition}
           onUpdated={handleUpdated}
           onDeleted={onDeleted}

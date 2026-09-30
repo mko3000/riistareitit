@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Popup, useMapEvents } from 'react-leaflet'
 import type { Popup as LeafletPopup } from 'leaflet'
-import { getSightings, type PublicSighting, type PublicUser } from '../api'
+import { getSightings, type PartySummary, type PublicSighting, type PublicUser } from '../api'
 import { AddSightingForm } from './AddSightingForm'
 import { SightingMarker } from './SightingMarker'
 import { t } from '../i18n'
@@ -26,9 +26,11 @@ interface SightingsLayerProps {
   user: PublicUser | null
   // Changes when party membership changes (RII-45) — reload what's visible.
   reloadKey: number
+  // RII-46: for the "Näkyy" pickers and popup labels.
+  myParties: PartySummary[]
 }
 
-export function SightingsLayer({ user, reloadKey }: SightingsLayerProps) {
+export function SightingsLayer({ user, reloadKey, myParties }: SightingsLayerProps) {
   const [sightings, setSightings] = useState<PublicSighting[]>([])
   const [pendingLocation, setPendingLocation] = useState<PendingLocation | null>(null)
   const addPopupRef = useRef<LeafletPopup>(null)
@@ -108,6 +110,7 @@ export function SightingsLayer({ user, reloadKey }: SightingsLayerProps) {
       {visibleSightings.map((sighting) => (
         <SightingMarker
           currentUserId={user?.id ?? null}
+          myParties={myParties}
           key={sighting.id}
           sighting={sighting}
           onUpdated={handleUpdated}
@@ -136,6 +139,7 @@ export function SightingsLayer({ user, reloadKey }: SightingsLayerProps) {
             lng={pendingLocation.lng}
             onCreated={handleCreated}
             popupRef={addPopupRef}
+            myParties={myParties}
           />
         </Popup>
       )}

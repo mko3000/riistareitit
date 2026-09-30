@@ -5,6 +5,7 @@ import {
   deleteSighting,
   getSpecies,
   updateSighting,
+  type PartySummary,
   type PublicSighting,
   type Species,
   type SightingFieldErrors,
@@ -14,6 +15,8 @@ import { SightingFieldsFieldset, OTHER, type Kind } from './SightingFieldsFields
 import { displayPerson } from './displayPerson'
 import { formatFinnishDate } from '../tracks/format'
 import { t } from '../i18n'
+import { VisibilityPicker } from '../parties/VisibilityPicker'
+import { visibilityName, type Visibility } from '../parties/visibility'
 
 // 5 decimals is ~1.1m of precision at these latitudes — plenty for "did the
 // pin end up roughly where I tapped", without a long string of noise digits.
@@ -25,6 +28,8 @@ interface SightingDetailPopupProps {
   sighting: PublicSighting
   // RII-43: whether the viewer created it — only then is editing offered.
   canEdit: boolean
+  // RII-46: for the "Näkyy" label and the edit-mode picker.
+  myParties: PartySummary[]
   // RII-34: SightingMarker's single source of truth for "where is this
   // marking right now" — the saved position, or a staged-but-unsaved one
   // while a move is in progress. Read directly in handleSave rather than
@@ -53,6 +58,7 @@ interface SightingDetailPopupProps {
 export function SightingDetailPopup({
   sighting,
   canEdit,
+  myParties,
   currentPosition,
   onUpdated,
   onDeleted,
@@ -85,6 +91,7 @@ export function SightingDetailPopup({
   const [date, setDate] = useState(sighting.observedDate)
   const [time, setTime] = useState(sighting.observedTime ?? nowRoundedTo30Min())
   const [notes, setNotes] = useState(sighting.notes ?? '')
+  const [visibility, setVisibility] = useState<Visibility>(sighting.partyId)
   const [fieldErrors, setFieldErrors] = useState<SightingFieldErrors>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -105,6 +112,7 @@ export function SightingDetailPopup({
     setDate(sighting.observedDate)
     setTime(sighting.observedTime ?? nowRoundedTo30Min())
     setNotes(sighting.notes ?? '')
+    setVisibility(sighting.partyId)
     setFieldErrors({})
     setFormError(null)
     setMode('edit')
@@ -132,6 +140,7 @@ export function SightingDetailPopup({
       observedDate: date,
       observedTime: time,
       notes: notes.trim() || undefined,
+      partyId: visibility,
     })
 
     setSubmitting(false)
@@ -181,6 +190,7 @@ export function SightingDetailPopup({
           {sighting.observedTime ? ` ${sighting.observedTime}` : ''}
         </p>
         {sighting.notes && <p className="notes">{sighting.notes}</p>}
+        <p className="parties-muted">{t.visibility.shownIn(visibilityName(sighting.partyId, myParties))}</p>
         {canEdit && (
           <button type="button" className="icon-button" onClick={startEditing} aria-label={t.common.edit}>
             ✏️
@@ -222,6 +232,8 @@ export function SightingDetailPopup({
         onNotesChange={setNotes}
         fieldErrors={fieldErrors}
       />
+
+      <VisibilityPicker parties={myParties} value={visibility} onChange={setVisibility} />
 
       {formError && <p className="form-error">{formError}</p>}
 
