@@ -23,6 +23,8 @@ function formatCoords(lat: number, lng: number): string {
 
 interface SightingDetailPopupProps {
   sighting: PublicSighting
+  // RII-43: whether the viewer created it — only then is editing offered.
+  canEdit: boolean
   // RII-34: SightingMarker's single source of truth for "where is this
   // marking right now" — the saved position, or a staged-but-unsaved one
   // while a move is in progress. Read directly in handleSave rather than
@@ -50,6 +52,7 @@ interface SightingDetailPopupProps {
 // open/closed state to manage here beyond view-vs-edit mode.
 export function SightingDetailPopup({
   sighting,
+  canEdit,
   currentPosition,
   onUpdated,
   onDeleted,
@@ -178,9 +181,11 @@ export function SightingDetailPopup({
           {sighting.observedTime ? ` ${sighting.observedTime}` : ''}
         </p>
         {sighting.notes && <p className="notes">{sighting.notes}</p>}
-        <button type="button" className="icon-button" onClick={startEditing} aria-label={t.common.edit}>
-          ✏️
-        </button>
+        {canEdit && (
+          <button type="button" className="icon-button" onClick={startEditing} aria-label={t.common.edit}>
+            ✏️
+          </button>
+        )}
       </div>
     )
   }

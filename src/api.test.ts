@@ -67,6 +67,20 @@ describe('API error localization', () => {
     })
   })
 
+  it('maps sighting permission errors (RII-43)', async () => {
+    respondWith(403, { error: 'forbidden', message: 'Only the creator can change this marking.' })
+    expect(await createSighting(SIGHTING)).toEqual({
+      ok: false,
+      message: 'Vain merkinnän lisääjä voi muokata tai poistaa sen.',
+    })
+
+    respondWith(401, { error: 'not_logged_in', message: 'Log in to see and add sightings and tracks.' })
+    expect(await createSighting(SIGHTING)).toEqual({
+      ok: false,
+      message: 'Kirjaudu sisään lisätäksesi ja muokataksesi havaintoja.',
+    })
+  })
+
   it('maps track errors, including an oversized track', async () => {
     const track = { name: 'x', sourceFormat: 'gpx' as const, segments: [[{ lat: 60, lng: 25 }]] }
     respondWith(400, { error: 'too_many_points', message: 'Track has more than 200000 points.' })

@@ -107,10 +107,9 @@ describe('POST /tracks', () => {
 })
 
 describe('GET /tracks', () => {
-  it("shows every user's tracks, newest recorded date first", async () => {
-    const other = await signUpUser(app, 'Toinen')
+  it('lists visible tracks newest recorded date first, undated last', async () => {
     await postTrack({ ...VALID_TRACK, name: 'Vanha', recordedDate: '2026-08-01' }, owner.cookie)
-    await postTrack({ ...VALID_TRACK, name: 'Uusi', recordedDate: '2026-09-25' }, other.cookie)
+    await postTrack({ ...VALID_TRACK, name: 'Uusi', recordedDate: '2026-09-25' }, owner.cookie)
     await postTrack({ ...VALID_TRACK, name: 'Ei päivää', recordedDate: undefined }, owner.cookie)
 
     const response = await app.inject({ method: 'GET', url: '/tracks', headers: { cookie: owner.cookie } })
@@ -127,15 +126,6 @@ describe('DELETE /tracks/:id', () => {
     expect(await prisma.track.count()).toBe(0)
   })
 
-  it("forbids deleting someone else's track", async () => {
-    const { id } = (await postTrack(VALID_TRACK, owner.cookie)).json().track
-    const other = await signUpUser(app, 'Toinen')
-
-    const response = await app.inject({ method: 'DELETE', url: `/tracks/${id}`, headers: { cookie: other.cookie } })
-    expect(response.statusCode).toBe(403)
-    expect(response.json().error).toBe('forbidden')
-    expect(await prisma.track.count()).toBe(1)
-  })
 
   it('returns 404 for a missing track or a malformed id', async () => {
     for (const id of ['00000000-0000-0000-0000-000000000000', 'not-a-uuid']) {

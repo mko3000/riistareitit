@@ -12,6 +12,8 @@ interface MoveTarget {
 
 interface SightingMarkerProps {
   sighting: PublicSighting
+  // RII-43: only the creator may edit/move/delete (the server enforces it).
+  currentUserId: string | null
   onUpdated: (sighting: PublicSighting) => void
   onDeleted: (id: string) => void
   onStartMove: (sightingId: string) => void
@@ -33,6 +35,7 @@ interface SightingMarkerProps {
 // ref is needed at all.
 export function SightingMarker({
   sighting,
+  currentUserId,
   onUpdated,
   onDeleted,
   onStartMove,
@@ -112,6 +115,7 @@ export function SightingMarker({
       <Popup ref={popupRef} eventHandlers={{ remove: handleCancelEdit }}>
         <SightingDetailPopup
           sighting={sighting}
+          canEdit={currentUserId !== null && sighting.createdBy?.id === currentUserId}
           currentPosition={currentPosition}
           onUpdated={handleUpdated}
           onDeleted={onDeleted}

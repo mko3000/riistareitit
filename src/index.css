@@ -59,6 +59,7 @@ body,
 }
 
 .map-area {
+  position: relative; /* anchors .login-notice */
   flex: 1 1 auto;
   /* A flex item's default min-height is `auto`, which can stop it from
      actually shrinking to the flex-computed size — and .map below needs
@@ -334,4 +335,22 @@ body,
 .track-detail button {
   align-self: flex-start;
   margin-top: 0.25rem;
+}
+
+/* RII-43: shown over the map when logged out (nothing is visible then). */
+.login-notice {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000; /* above Leaflet's own panes */
+  max-width: calc(100% - 7rem); /* clear of the zoom and layers controls */
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.4rem 0.75rem;
+  font-family: sans-serif;
+  font-size: 0.9rem;
+  text-align: center;
+  pointer-events: none; /* never blocks panning the map underneath */
 }
