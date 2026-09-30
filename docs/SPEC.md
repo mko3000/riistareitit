@@ -131,20 +131,25 @@ CREATE TABLE sessions (
 );
 CREATE INDEX ON sessions (user_id);
 
--- (Post-MVP: RII-10) — hunting parties
+-- (Post-MVP: RII-10) — hunting parties. Target shape designed in RII-33
+-- (§9 "Visibility and hunting parties"); not implemented yet.
 CREATE TABLE hunting_parties (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        TEXT NOT NULL,
-  created_by  UUID REFERENCES users(id),
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT NOT NULL,
+  created_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+  invite_code  TEXT UNIQUE,  -- current join code (random, ~128 bits, URL-safe);
+                             -- NULL = joining disabled; regenerating revokes the old one
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE hunting_party_members (
   party_id  UUID NOT NULL REFERENCES hunting_parties(id) ON DELETE CASCADE,
   user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role      TEXT NOT NULL DEFAULT 'member', -- 'admin' | 'member' (party-level, unrelated to users.role)
   joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (party_id, user_id)
 );
+CREATE INDEX ON hunting_party_members (user_id);
 
 -- MVP: RII-2, RII-3 — imported walking routes. Implemented in RII-3.
 CREATE TABLE tracks (
@@ -156,7 +161,8 @@ CREATE TABLE tracks (
                                  -- import requires login. SET NULL mirrors sightings; what
                                  -- happens to a deleted account's tracks is an open RII-33
                                  -- question (no account deletion exists yet)
-  -- party_id     UUID REFERENCES hunting_parties(id) -- target shape, added with RII-10
+  -- party_id     UUID REFERENCES hunting_parties(id) ON DELETE SET NULL
+  --              -- target shape (RII-33 design, §9), added with RII-10; NULL = private
   imported_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   recorded_date   DATE, -- date the walk happened, from the source file if present
   segments        JSONB NOT NULL -- the whole track, see "Track geometry storage" below
@@ -214,7 +220,8 @@ CREATE TABLE sightings (
   -- via a follow-up migration once their target tables exist, rather than
   -- as dangling/unconstrained UUIDs now.
   -- track_id            UUID REFERENCES tracks(id),
-  -- party_id            UUID REFERENCES hunting_parties(id),
+  -- party_id            UUID REFERENCES hunting_parties(id) ON DELETE SET NULL,
+  --                     -- (RII-33 design, §9) NULL = private to its creator
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (species_id IS NOT NULL OR custom_species IS NOT NULL),
@@ -249,8 +256,8 @@ Notes:
 - Editing/deleting a sighting is currently unrestricted — any user (or anonymous
   visitor) can edit/delete any entry, not just its creator. Deliberate MVP choice for
   a small trusted hunting-party context; `created_by_user_id` exists so this can be
-  locked down later (e.g. creator-or-party-member-only) without a schema change. Not
-  yet designed — don't build permission checks against this until that's decided.
+  locked down later without a schema change. **Now designed (`RII-33`, §9): creator
+  only**, implemented with hunting parties (`RII-10`).
 - Only `lat`/`lng`, `species_id`-or-`custom_species`, and `observed_date` are `NOT NULL`
   on `sightings` — every other field can be filled in later (RII-23).
 - **Visibility is currently global and unfiltered — every sighting is visible to every
@@ -259,7 +266,8 @@ Notes:
   model is very likely party-scoped (see `party_id` above, already reserved for this),
   roughly "if you're not in the party that owns this land/data, you don't see it" — but
   the exact rules (parties-of-one? multiple parties? a user in no party at all? shared
-  vs. private areas?) are **not designed yet**. `RII-33` tracks doing that design
+  vs. private areas?) are **now designed — see §9 "Visibility and hunting parties"
+  (`RII-33`)**; until `RII-10` implements it the global behavior stays. `RII-33` tracked doing that design
   properly before real (non-testing) deployment; don't build filtering logic ad hoc in
   the meantime.
 - Fog of war (RII-13, Post-MVP) is computed from track coverage (`tracks.segments`,
@@ -639,8 +647,10 @@ currently public).
 
 ### Accounts API
 
-Login stays **optional** app-wide (see `RII-8`) — nothing below requires an account;
-it only attributes data to a real name instead of "unknown" once you have one.
+Login is currently **optional** app-wide (see `RII-8`) — nothing below requires an
+account; it only attributes data to a real name instead of "unknown" once you have
+one. **Changes with `RII-10`:** seeing or adding any sightings/tracks will require
+login (§9).
 
 - `POST /signup` — `{ email, displayName, password }` → `201` with the created user
   (never includes `passwordHash`) and sets the session cookie (signed in immediately,
@@ -672,12 +682,121 @@ it only attributes data to a real name instead of "unknown" once you have one.
 
 ### Still deferred (Post-MVP)
 
-Hunting parties, area borders, date/party filtering, fog of war, admin role, English
-i18n — see Linear issues `RII-9` through `RII-14` for current requirements and open
-questions. Expand this section with concrete API/schema detail before starting each
+Hunting parties (designed in §9, built in `RII-10`), area borders, date/party
+filtering, fog of war, admin role, English i18n — see Linear issues `RII-9` through
+`RII-14` for current requirements and open questions. Expand this section with concrete API/schema detail before starting each
 one; don't let it stay a stub once work begins.
 
-## 9. Open questions / assumptions to confirm
+## 9. Visibility and hunting parties (RII-33 design, RII-10)
+
+**Status: design, decided with Miko 2026-09-30 (`RII-33`); merging the PR that added
+this section is Miko's sign-off. Not implemented yet** — `RII-10`'s sub-issues build
+it. Until then the current behavior stays: sightings global and public, tracks
+global to logged-in users.
+
+### Rules
+
+1. **Login required to see or add anything.** Logged-out visitors see an empty map
+   (base layers only) and a prompt to log in. Anonymous sighting creation goes away:
+   every sighting and track has a creator.
+2. **Every sighting and track belongs to at most one party** (`party_id`), chosen by
+   its creator when adding it: one of the creator's parties, or **"Vain minä"** (only
+   me, `party_id = NULL`). The picker defaults to the creator's last choice
+   (remembered per browser). Tracks: chosen in the import panel, one choice for the
+   whole batch with a per-row override. Changeable later by the creator (edit), to
+   another of their parties or to private.
+3. **A user sees an item iff** they created it **or** they're currently a member of
+   its party. Formally, for user `U`:
+   `item.created_by = U OR item.party_id IN (parties U is a member of)`.
+   - Membership in **several parties** is allowed; the map shows the union of all
+     their parties' items plus their own private ones. The date/party filter
+     (`RII-12`) narrows this down; there's no "active party" switch.
+   - A user in **no party** sees only their own items.
+   - **Tracks follow exactly the same rules as sightings** — a timestamped route is
+     at least as sensitive (it often starts at someone's home).
+   - Visibility is **per item**, never per area. Hunting areas (`RII-11`) are map
+     overlays owned by a party (visible to its members), and **do not** grant
+     visibility of items inside them.
+4. **Only the creator edits or deletes an item.** Party admins can't edit or delete
+   other members' items (possible later addition: "remove from party", which would
+   make it private to its creator).
+5. **Leaving or being removed from a party:** the member's items shared with that
+   party **stay with the party** (still visible to its members — it's the party's
+   shared history), and the member keeps seeing and managing their own items (rule 3,
+   creator clause). They lose sight of everyone else's items in that party.
+6. **Deleting a party** (admin only): its items aren't deleted; `party_id` becomes
+   `NULL` (`ON DELETE SET NULL`), so each becomes private to its creator.
+7. **Deleting a user account** (no such feature yet): out of scope; decide when
+   account deletion is built (tracks/sightings currently `ON DELETE SET NULL` on the
+   creator — an item without a creator and without a party would be visible to no
+   one).
+8. **App admin role (`RII-9`) grants no data visibility.** An app admin doesn't see
+   parties' sightings or tracks by virtue of the role; what the role *can* do is still
+   `RII-9`'s open question.
+
+### Parties
+
+- **Anyone logged in can create a party** and becomes its first **admin**
+  (`hunting_party_members.role = 'admin'`). A party has a name (1–100 chars).
+- **Joining by invite link/code:** each party has at most one current `invite_code`.
+  An admin shares the link (e.g. over WhatsApp); a logged-in user who opens it sees
+  the party's name and a "Liity" button, and joins as a `member`. Someone without an
+  account signs up first, then continues to the same join screen. Admins can
+  **regenerate** the code (old links stop working) or **disable** it. Codes are random
+  (~128 bits) so they can't be guessed; they don't expire on their own.
+- **Admins** can: rename the party, regenerate/disable the invite code, remove
+  members, make another member admin, delete the party. **Members** can view the
+  member list and leave.
+- **The last admin can't leave** while other members remain — they make someone else
+  admin first (or delete the party). The last member leaving deletes the party
+  (rule 6 applies).
+
+### API sketch (to be finalized in `RII-10`'s sub-issues)
+
+- `GET /parties` — my parties (id, name, my role, member count).
+- `POST /parties` `{ name }` → creates, caller is admin.
+- `GET /parties/:id` — details + members (members only); includes `inviteCode` for admins.
+- `PATCH /parties/:id` `{ name }`, `DELETE /parties/:id` — admin only.
+- `POST /parties/:id/invite-code` (regenerate), `DELETE /parties/:id/invite-code` (disable) — admin only.
+- `GET /invites/:code` — party name for the join screen (logged in; `404` for an unknown/disabled code).
+- `POST /invites/:code/join` — join as member (idempotent if already a member).
+- `DELETE /parties/:id/members/:userId` — admin removes someone, or a member removes themselves (= leave).
+- `PATCH /parties/:id/members/:userId` `{ role }` — admin only.
+- `GET /sightings`, `GET /tracks` — filtered by rule 3 (and `401` when logged out).
+- `POST`/`PATCH /sightings`, `POST /tracks` — accept `partyId` (must be one of the
+  caller's parties, or `null`); `PATCH`/`DELETE` creator only (`403` otherwise).
+- Visibility is enforced **in the server queries**, never only in the UI.
+
+### UI sketch (Finnish, details in the sub-issues)
+
+- Top bar: a **"Porukat"** (parties) menu — list of my parties, create a party, and
+  per party: members, invite link (copy/share, regenerate), rename, leave/delete.
+- Add-sighting form and import panel: a **"Näkyy"** (visible to) picker — my parties +
+  "Vain minä".
+- Sighting and track popups show which party the item belongs to.
+- Join screen at an invite link (`?liity=<code>` on the app URL; no router needed).
+
+### Migration of existing data
+
+- Existing sightings and tracks get `party_id = NULL` — **private to their creator**.
+- Existing sightings with **no creator** (added anonymously while that was allowed)
+  would become visible to no one. A one-off, manually run script assigns them to a
+  given user (Miko's account) — a script rather than a migration, because it names a
+  specific account.
+
+### Implementation order (sub-issues of `RII-10`)
+
+1. Data model + migration: parties, members (with role), invite code; `party_id` on
+   sightings and tracks; login-required for creating sightings.
+2. Visibility enforcement in the sightings/tracks APIs (rule 3), creator-only
+   edit/delete, `partyId` on create/edit — with server tests for every rule above.
+3. Party management API (create, rename, delete, members, roles, invite codes, join).
+4. UI: party menu + management, join-by-link screen.
+5. UI: "Näkyy" picker in the add/edit sighting form and import panel; party shown in
+   popups; logged-out empty-map state.
+6. One-off script for anonymous legacy sightings.
+
+## 10. Open questions / assumptions to confirm
 
 - ~~Backend web framework~~ — resolved: Fastify (`RII-27`).
 - ~~ORM/migration tool~~ — resolved: Prisma, pinned to 6.x for Node 20 compatibility
@@ -687,5 +806,6 @@ one; don't let it stay a stub once work begins.
   for the tile proxy (`RII-41`, see "Map tiles API").
 - Hosting/deployment target.
 - Admin role's actual capabilities (`RII-9`).
-- Hunting party invite flow: open-add vs. accept-required (`RII-10`).
+- ~~Hunting party invite flow~~ — resolved: invite link/code (`RII-33`, §9).
+- ~~Sighting/track visibility & privacy model~~ — resolved (`RII-33`, §9).
 - Fog of war: which overlay variant ships, or both (`RII-13`).
