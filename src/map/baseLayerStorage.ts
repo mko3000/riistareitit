@@ -24,3 +24,9 @@ export function storeBaseLayer(id: BaseLayerId): void {
     // Not remembered this time; the map still works.
   }
 }
+
+// RII-41: the MML layers need login, so a logged-out visitor always starts on
+// OpenStreetMap. The stored choice is kept for when they log in again.
+export function initialBaseLayer(loggedIn: boolean): BaseLayerId {
+  return loggedIn ? readStoredBaseLayer() : 'osm'
+}

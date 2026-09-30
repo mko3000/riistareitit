@@ -1,18 +1,24 @@
 import type { FastifyInstance } from 'fastify'
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { tileIntersectsFinland } from '../src/routes/tiles.js'
-import { createTestApp } from './helpers.js'
+import { createTestApp, resetDatabase, signUpUser, type TestUser } from './helpers.js'
 
-// RII-6. fetch is stubbed throughout — these tests never call MML. The
-// MML_API_KEY here is the fake one from vitest.config.ts.
+// RII-6, login required since RII-41. fetch is stubbed throughout — these
+// tests never call MML. The MML_API_KEY here is the fake one from
+// vitest.config.ts.
 
 let app: FastifyInstance
+let user: TestUser
 
 beforeAll(async () => {
   app = await createTestApp()
 })
 afterAll(async () => {
   await app.close()
+})
+beforeEach(async () => {
+  await resetDatabase()
+  user = await signUpUser(app)
 })
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -31,11 +37,40 @@ function stubMml(response: () => Response) {
   return fetchMock
 }
 
-function getTile(layer: string, { z, x, y }: { z: number; x: number; y: number }) {
-  return app.inject({ method: 'GET', url: `/tiles/${layer}/${z}/${x}/${y}` })
+function getTile(layer: string, { z, x, y }: { z: number; x: number; y: number }, cookie: string | null = user.cookie) {
+  return app.inject({
+    method: 'GET',
+    url: `/tiles/${layer}/${z}/${x}/${y}`,
+    headers: cookie ? { cookie } : {},
+  })
 }
 
 describe('GET /tiles/:layer/:z/:x/:y', () => {
+  it.each([
+    ['no session cookie', null],
+    ['an unknown session id', 'session_id=00000000-0000-4000-8000-000000000000'],
+  ])('answers 401 with %s, without calling MML', async (_case, cookie) => {
+    const fetchMock = stubMml(() => new Response(PNG_BYTES))
+    const response = await getTile('maastokartta', HELSINKI, cookie)
+
+    expect(response.statusCode).toBe(401)
+    expect(response.json().error).toBe('not_logged_in')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('checks login before validating the tile', async () => {
+    const response = await app.inject({ method: 'GET', url: '/tiles/selkokartta/99/0/0' })
+    expect(response.statusCode).toBe(401)
+  })
+
+  it('answers 401 after logging out', async () => {
+    const fetchMock = stubMml(() => new Response(PNG_BYTES))
+    await app.inject({ method: 'POST', url: '/logout', headers: { cookie: user.cookie } })
+
+    expect((await getTile('maastokartta', HELSINKI)).statusCode).toBe(401)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('proxies a maastokartta tile with the key in Basic auth, not the URL', async () => {
     const fetchMock = stubMml(() => new Response(PNG_BYTES, { headers: { 'Content-Type': 'image/png' } }))
 
@@ -44,7 +79,7 @@ describe('GET /tiles/:layer/:z/:x/:y', () => {
     expect(response.statusCode).toBe(200)
     expect(response.rawPayload).toEqual(PNG_BYTES)
     expect(response.headers['content-type']).toBe('image/png')
-    expect(response.headers['cache-control']).toBe('public, max-age=604800')
+    expect(response.headers['cache-control']).toBe('private, max-age=604800')
 
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe(
@@ -72,7 +107,7 @@ describe('GET /tiles/:layer/:z/:x/:y', () => {
     ['non-numeric index', '/tiles/maastokartta/10/abc/296'],
   ])('rejects %s with 400 without calling MML', async (_case, url) => {
     const fetchMock = stubMml(() => new Response('unused'))
-    const response = await app.inject({ method: 'GET', url })
+    const response = await app.inject({ method: 'GET', url, headers: { cookie: user.cookie } })
 
     expect(response.statusCode).toBe(400)
     expect(response.json().error).toBe('invalid_tile')

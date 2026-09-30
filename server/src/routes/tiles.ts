@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import { env } from '../env.js'
+import { getSessionUser } from '../session.js'
 
 // RII-6: proxies base map tiles from the National Land Survey of Finland's
-// (MML) open WMTS so the API key stays on the server. See docs/SPEC.md "Map
+// (MML) open WMTS so the API key stays on the server. Login required since
+// RII-41, so it isn't an open proxy running on our key. See docs/SPEC.md "Map
 // tiles API".
 
 const MML_WMTS_BASE = 'https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/1.0.0'
@@ -45,6 +47,11 @@ function parseTileIndex(value: string): number | null {
 
 export default async function tilesRoutes(app: FastifyInstance) {
   app.get('/tiles/:layer/:z/:x/:y', async (request, reply) => {
+    // First, so logged-out requests never reach MML (nor learn anything else).
+    if (!(await getSessionUser(request))) {
+      return reply.status(401).send({ error: 'not_logged_in', message: 'Log in to use the MML map layers.' })
+    }
+
     const params = request.params as { layer: string; z: string; x: string; y: string }
     const layer = LAYERS[params.layer]
     const z = parseTileIndex(params.z)
@@ -95,7 +102,8 @@ export default async function tilesRoutes(app: FastifyInstance) {
     const body = Buffer.from(await upstream.arrayBuffer())
     return reply
       .header('Content-Type', upstream.headers.get('content-type') ?? `image/${layer.extension === 'jpg' ? 'jpeg' : 'png'}`)
-      .header('Cache-Control', `public, max-age=${BROWSER_CACHE_SECONDS}`)
+      // private: login-only content must not be served from a shared cache.
+      .header('Cache-Control', `private, max-age=${BROWSER_CACHE_SECONDS}`)
       .send(body)
   })
 }

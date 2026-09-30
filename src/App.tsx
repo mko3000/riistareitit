@@ -42,7 +42,9 @@ function App() {
       <AuthBar user={user} checkingSession={checkingSession} onUserChange={setUser} controlsSlotRef={setBarControls} />
       <div className="map-area">
         <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="map">
-          <BaseLayers />
+          {/* RII-41: which base layers are offered depends on login, so wait
+              for the session check rather than loading OSM tiles first. */}
+          {!checkingSession && <BaseLayers key={user ? 'in' : 'out'} loggedIn={user !== null} />}
           <TracksLayer user={user} barControls={barControls} reloadKey={membershipVersion} myParties={myParties} />
           <SightingsLayer user={user} reloadKey={membershipVersion} myParties={myParties} />
         </MapContainer>

@@ -576,16 +576,28 @@ All three routes **require login** (`401` otherwise). **Visibility since `RII-43
 - **Finland only:** tiles that don't intersect lat 58.8–70.3, lng 19.0–32.0 (MML's
   coverage plus margin) get `404` without calling MML — they'd be blank anyway.
 - Responses pass through MML's body and `Content-Type`, with
-  `Cache-Control: public, max-age=604800` (7 days — the maps change rarely) so a
-  browser re-requests a tile at most weekly. No server-side tile cache yet.
+  `Cache-Control: private, max-age=604800` (7 days — the maps change rarely) so a
+  browser re-requests a tile at most weekly. `private` because the route needs login:
+  a shared cache (proxy/CDN) must not hand the tiles to logged-out visitors. No
+  server-side tile cache yet.
 - Errors: invalid layer/z/x/y → `400 invalid_tile`; MML `404` → `404`; MML rejecting
   the key (`401`/`403`) → `502 tiles_unavailable` and a server log line naming the key
   as the likely cause; other MML errors or a timeout (10 s) → `502 tiles_unavailable`.
-- No login required, so the map works for logged-out visitors like before.
-  That makes the route an open proxy to MML with our key for anyone who can reach
-  the server — acceptable while the app isn't public. **Decided (Miko 2026-09-30):**
-  require login for the MML layers before public deployment, logged-out visitors
-  get OpenStreetMap — tracked in `RII-41`.
+- **Login required** (`RII-41`): without a valid session the route answers
+  `401 { error: 'not_logged_in' }` before anything else (even before validating the
+  tile), so logged-out requests never reach MML. Otherwise the route would be an open
+  proxy to MML running on our key, which MML could throttle or block, breaking the
+  map for everyone. Logged-out visitors get OpenStreetMap instead (§6 "Base layers").
+  - The session is the usual `session_id` cookie. Leaflet's tiles are plain `<img>`
+    requests without `crossorigin`, so the browser sends cookies with them like any
+    same-site request. `SameSite=Lax` covers this as long as the frontend and API
+    are on the **same site** (e.g. `localhost:5173` → `localhost:3001` in dev, or
+    `app.example.fi` → `api.example.fi` once deployed). The rest of the app's
+    `credentials: 'include'` fetches need the same, so it's not a new constraint.
+  - One session lookup (primary-key query) per tile request; fine at this scale.
+  - No rate limiting for now: with login required, only people with an account
+    can use the key, and traffic is small. Revisit if MML complains or the app
+    opens to the public at large.
 - Tests (`server/test/tiles.test.ts`) stub `fetch`, so they never call MML; the test
   config sets a fake `MML_API_KEY`.
 
@@ -602,6 +614,11 @@ All three routes **require login** (`401` otherwise). **Visibility since `RII-43
   "Map tiles API") so Leaflet never requests tiles outside it; attribution
   "© Maanmittauslaitos (CC BY 4.0)". The chosen layer is remembered per browser in
   `localStorage` (`riistareitit.baseLayer`), falling back to Maastokartta.
+  - **Logged out** (`RII-41`): the MML tiles need login, so only OpenStreetMap is
+    offered and shown. The stored choice is left untouched, so logging in brings
+    back the remembered layer; logging out switches back to OSM. While the session is
+    still being checked on page load, no base layer is shown yet (a moment of empty
+    map rather than loading OSM tiles and then replacing them).
   Tracks (canvas renderer) and sighting/kill markers are separate panes above every
   base layer, so they render identically on all three.
 - **Gap joining** (`RII-38`, `src/tracks/gapJoining.ts`): when a track is drawn,
@@ -740,7 +757,8 @@ dropped, see "Migration of existing data".
 ### Rules
 
 1. **Login required to see or add anything.** Logged-out visitors see an empty map
-   (base layers only) and a prompt to log in. Anonymous sighting creation goes away:
+   (OpenStreetMap only — the MML layers need login too since `RII-41`, §6 "Base
+   layers") and a prompt to log in. Anonymous sighting creation goes away:
    every sighting and track has a creator.
 2. **Every sighting and track belongs to at most one party** (`party_id`), chosen by
    its creator when adding it: one of the creator's parties, or **"Vain minä"** (only
@@ -910,8 +928,8 @@ developer-facing (§7); errors are told apart by `error` code.
 - ~~ORM/migration tool~~ — resolved: Prisma, pinned to 6.x for Node 20 compatibility
   (`RII-27`).
 - ~~Map tile provider for topo + satellite layers~~ — resolved: MML open WMTS, proxied
-  through the server (`RII-6`, §3, §6). Follow-up before deployment: require login
-  for the tile proxy (`RII-41`, see "Map tiles API").
+  through the server (`RII-6`, §3, §6); the proxy requires login (`RII-41`, see "Map
+  tiles API").
 - Hosting/deployment target.
 - Admin role's actual capabilities (`RII-9`).
 - ~~Hunting party invite flow~~ — resolved: invite link/code (`RII-33`, §9).
