@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer } from 'react-leaflet'
+import { MapContainer } from 'react-leaflet'
 import { getMe, type PublicUser } from './api'
 import { AuthBar } from './auth/AuthBar'
+import { BaseLayers } from './map/BaseLayers'
 import { SightingsLayer } from './sightings/SightingsLayer'
 import { TracksLayer } from './tracks/TracksLayer'
 
@@ -30,10 +31,7 @@ function App() {
       <AuthBar user={user} checkingSession={checkingSession} onUserChange={setUser} controlsSlotRef={setBarControls} />
       <div className="map-area">
         <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="map">
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <BaseLayers />
           <TracksLayer user={user} barControls={barControls} />
           <SightingsLayer />
         </MapContainer>

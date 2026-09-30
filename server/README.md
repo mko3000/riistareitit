@@ -64,3 +64,9 @@ database whose name doesn't end in `_test`. Point them elsewhere with
 
 See `.env.example` for the full list. `DATABASE_URL` must match whatever Postgres
 `docker-compose.yml` (or your own instance) is actually running.
+
+`MML_API_KEY` is your own National Land Survey of Finland open API key, used by the
+map tile proxy (`/tiles/...`) for the Maastokartta and Ilmakuva map layers. Create it in
+MML's [Oma tili](https://omatili.maanmittauslaitos.fi/user/new/avoimet-rajapintapalvelut?lang=en)
+(register, log in, create an API key) and put it in `server/.env` — never commit it.
+Without it the server still runs; those two map layers just don't load.

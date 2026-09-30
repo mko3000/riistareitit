@@ -14,6 +14,13 @@ export const fi = {
     delete: 'Poista',
   },
 
+  map: {
+    // Base layer names in the layers control (RII-6).
+    topographic: 'Maastokartta',
+    aerial: 'Ilmakuva',
+    openStreetMap: 'OpenStreetMap',
+  },
+
   auth: {
     checkingSession: 'Tarkistetaan kirjautumista…',
     signedInAs: (name: string) => `Kirjautuneena: ${name}`,

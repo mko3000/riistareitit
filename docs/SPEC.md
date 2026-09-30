@@ -45,12 +45,19 @@ tickets, as the behavioural source of truth — tickets link back here once impl
   `server/prisma/schema.prisma` intentionally has zero models as of `RII-27` — it's
   infra only. The first real table (`users`) lands in `RII-28`.
 - **Map rendering:** Leaflet 1.9 via `react-leaflet` 5. Confirmed and implemented
-  (`RII-26`). Tile provider for the base layer is currently OpenStreetMap's standard
-  tiles (`{s}.tile.openstreetmap.org`) — free, no API key, no cost implications; this
-  is a placeholder, not the final look. Topographic/satellite tile providers are
-  **still undecided** — this is a billed-API hard boundary per `CLAUDE.md`, needs
-  explicit sign-off before `RII-6` implements the layer toggle (candidates: MML avoin
-  data for Finnish topo maps, a paid provider for satellite).
+  (`RII-26`). **Base map tiles** (decided with Miko 2026-09-30, `RII-6`): the National
+  Land Survey of Finland's (**MML**) open map-image service (Karttakuvapalvelu, WMTS)
+  for the topographic map (`maastokartta`) and aerial photos (`ortokuva`), **proxied
+  through our server** so the API key never reaches the browser; OpenStreetMap's
+  standard tiles kept as a third layer for outside Finland. See §6 "Base layers" and
+  the "Map tiles API" section.
+  - MML open service facts (checked 2026-09-30): free, CC BY 4.0 (source attribution
+    required), personal API key required (created by Miko in MML's *Oma tili*;
+    MML's terms make the key holder responsible for protecting it), Web Mercator
+    (`WGS84_Pseudo-Mercator`) zoom 0–16, Finland only, no support or uptime guarantee,
+    no fixed quota but "not intended for high-volume services" — MML may throttle a
+    disruptive user. **No billing risk.** A paid subscription tier exists (from
+    ~€247/yr) with guarantees; not needed now.
 - **Styling:** deliberately minimal — a handful of plain CSS rules to make the map
   container fill the viewport (`src/index.css`), no design system or component
   library. Revisit once the app has more than one screen/feature worth styling.
@@ -501,10 +508,48 @@ currently public).
   whose delete is unrestricted — a track is one person's recorded movement, so only
   they remove it). `404` if it doesn't exist.
 
+### Map tiles API (`RII-6`)
+
+- `GET /tiles/:layer/:z/:x/:y` — proxies one Web Mercator tile from MML's open WMTS.
+  `layer` is `maastokartta` (PNG) or `ortokuva` (JPEG); `z` 0–16; `x`/`y` integers in
+  `0 … 2^z − 1` (standard XYZ, same as Leaflet's `{z}/{x}/{y}`). Upstream URL:
+  `https://avoin-karttakuva.maanmittauslaitos.fi/avoin/wmts/1.0.0/{layer}/default/WGS84_Pseudo-Mercator/{z}/{y}/{x}.{png|jpg}`
+  (WMTS REST order is TileMatrix/TileRow/TileCol = z/y/x).
+- The API key comes from the server env var **`MML_API_KEY`** (in `server/.env`,
+  never committed; `server/.env.example` has an empty placeholder). It's sent to MML
+  as HTTP Basic auth (key as username, empty password) — not in the URL, so it never
+  lands in logs that record URLs. Without the variable set the route answers
+  `503 { error: 'tiles_not_configured' }` and the rest of the server works normally.
+- **Finland only:** tiles that don't intersect lat 58.8–70.3, lng 19.0–32.0 (MML's
+  coverage plus margin) get `404` without calling MML — they'd be blank anyway.
+- Responses pass through MML's body and `Content-Type`, with
+  `Cache-Control: public, max-age=604800` (7 days — the maps change rarely) so a
+  browser re-requests a tile at most weekly. No server-side tile cache yet.
+- Errors: invalid layer/z/x/y → `400 invalid_tile`; MML `404` → `404`; MML rejecting
+  the key (`401`/`403`) → `502 tiles_unavailable` and a server log line naming the key
+  as the likely cause; other MML errors or a timeout (10 s) → `502 tiles_unavailable`.
+- No login required, so the map works for logged-out visitors like before.
+  **Open before deployment:** that makes the route an open proxy to MML with our key
+  for anyone who can reach the server — acceptable while the app isn't public;
+  decide login-gating and/or rate limiting when hosting is decided.
+- Tests (`server/test/tiles.test.ts`) stub `fetch`, so they never call MML; the test
+  config sets a fake `MML_API_KEY`.
+
 ## 6. Map (RII-3, RII-5, RII-6)
 
-- Base layers: topographic and satellite, user-toggleable. Both must render tracks and
-  sighting/kill markers identically on top.
+- **Base layers** (`RII-6`, `src/map/BaseLayers.tsx`): Leaflet's standard layers
+  control (top-right corner) switches between three, names in Finnish:
+  1. **Maastokartta** (default) — MML topographic map, via `/tiles/maastokartta/...`.
+  2. **Ilmakuva** — MML aerial photos (`ortokuva`), via `/tiles/ortokuva/...`.
+     (Aerial photos, not satellite — better resolution than satellite for Finland.)
+  3. **OpenStreetMap** — direct from `tile.openstreetmap.org`, for outside Finland.
+  MML layers: `maxNativeZoom` 16 (the open service's limit) with Leaflet upscaling to
+  zoom 18 like OSM; `bounds` set to Finland's extent (same box as the server's, see
+  "Map tiles API") so Leaflet never requests tiles outside it; attribution
+  "© Maanmittauslaitos (CC BY 4.0)". The chosen layer is remembered per browser in
+  `localStorage` (`riistareitit.baseLayer`), falling back to Maastokartta.
+  Tracks (canvas renderer) and sighting/kill markers are separate panes above every
+  base layer, so they render identically on all three.
 - Tracks render as polylines, one per segment (`src/tracks/TracksLayer.tsx`). Saved
   tracks: solid orange `#ea580c`, weight 4, drawn on a shared **canvas renderer**
   (many long polylines are much cheaper on one canvas than as SVG paths). Import
@@ -621,9 +666,9 @@ one; don't let it stay a stub once work begins.
 - ~~Backend web framework~~ — resolved: Fastify (`RII-27`).
 - ~~ORM/migration tool~~ — resolved: Prisma, pinned to 6.x for Node 20 compatibility
   (`RII-27`).
-- Map tile provider for topo + satellite layers, and its cost implications (hard
-  boundary per `CLAUDE.md` — needs explicit sign-off). The current OSM standard-tile
-  base layer (`RII-26`) is a free placeholder, not a resolution of this question.
+- ~~Map tile provider for topo + satellite layers~~ — resolved: MML open WMTS, proxied
+  through the server (`RII-6`, §3, §6). Open follow-up before deployment: the proxy
+  is open to anyone who can reach the server (see "Map tiles API").
 - Hosting/deployment target.
 - Admin role's actual capabilities (`RII-9`).
 - Hunting party invite flow: open-add vs. accept-required (`RII-10`).
