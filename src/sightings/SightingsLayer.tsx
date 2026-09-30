@@ -28,9 +28,11 @@ interface SightingsLayerProps {
   reloadKey: number
   // RII-46: for the "Näkyy" pickers and popup labels.
   myParties: PartySummary[]
+  // RII-49: the fog-of-war overlay is computed from the same list.
+  onSightingsChange: (sightings: PublicSighting[]) => void
 }
 
-export function SightingsLayer({ user, reloadKey, myParties }: SightingsLayerProps) {
+export function SightingsLayer({ user, reloadKey, myParties, onSightingsChange }: SightingsLayerProps) {
   const [sightings, setSightings] = useState<PublicSighting[]>([])
   const [pendingLocation, setPendingLocation] = useState<PendingLocation | null>(null)
   const addPopupRef = useRef<LeafletPopup>(null)
@@ -58,6 +60,8 @@ export function SightingsLayer({ user, reloadKey, myParties }: SightingsLayerPro
   }, [userId, reloadKey])
 
   const visibleSightings = user ? sightings : []
+
+  useEffect(() => onSightingsChange(sightings), [sightings, onSightingsChange])
 
   // RII-34: Escape backs out of "pick a new location" mode without
   // changing anything — the popup was already closed when Move was

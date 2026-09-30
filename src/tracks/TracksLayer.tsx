@@ -13,12 +13,14 @@ interface TracksLayerProps {
   reloadKey: number
   // RII-46: for the "Näkyy" pickers and popup labels.
   myParties: PartySummary[]
+  // RII-49: the fog-of-war overlay is computed from the same list.
+  onTracksChange: (tracks: PublicTrack[]) => void
 }
 
 // RII-3: saved tracks (solid) + the import control with its previews
 // (dashed). Tracks are login-only, so logged out this shows no tracks. See
 // docs/SPEC.md §5/§6.
-export function TracksLayer({ user, barControls, reloadKey, myParties }: TracksLayerProps) {
+export function TracksLayer({ user, barControls, reloadKey, myParties, onTracksChange }: TracksLayerProps) {
   const [tracks, setTracks] = useState<PublicTrack[]>([])
 
   // One canvas for all saved tracks — much cheaper than an SVG path per
@@ -49,6 +51,8 @@ export function TracksLayer({ user, barControls, reloadKey, myParties }: TracksL
   }, [userId, reloadKey])
 
   const visibleTracks = user ? tracks : []
+
+  useEffect(() => onTracksChange(tracks), [tracks, onTracksChange])
 
   // RII-38: what's drawn per track — short gaps joined, long ones left out.
   // Computed once per track list, not on every render.

@@ -21,6 +21,14 @@ export const fi = {
     topographic: 'Maastokartta',
     aerial: 'Ilmakuva',
     openStreetMap: 'OpenStreetMap',
+    // RII-49: fog-of-war overlay (layers control) and its legend.
+    fogOfWar: 'Tutkitut alueet',
+    fogLegendTitle: 'Linnut / käynti',
+    fogLegendNone: 'Ei havaintoja',
+    fogLegendUnderHalf: 'alle 0,5',
+    fogLegendHalfToOne: '0,5–1',
+    fogLegendOneToTwo: '1–2',
+    fogLegendOverTwo: 'yli 2',
   },
 
   auth: {

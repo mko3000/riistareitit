@@ -523,3 +523,31 @@ body,
   min-height: 2rem;
   max-width: 100%;
 }
+
+/* RII-49: fog-of-war legend, bottom-left while the overlay is on. */
+.fog-legend {
+  background: white;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  font-family: sans-serif;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.fog-legend-title {
+  font-weight: bold;
+}
+
+.fog-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fog-legend-swatch {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 2px;
+}
