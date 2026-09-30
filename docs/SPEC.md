@@ -702,8 +702,8 @@ one; don't let it stay a stub once work begins.
 
 **Status:** design decided with Miko 2026-09-30 (`RII-33`, signed off by merging PR
 #66). Being built in `RII-10`'s sub-issues: tables (`RII-42`) ✅; **rules 1–4 enforced
-in the API (`RII-43`)** ✅ — the party management API, the UI for parties and the
-"Näkyy" picker come in `RII-44`–`RII-46`. Until `RII-46`, new items can only be
+in the API (`RII-43`)** ✅; **party management API and UI (`RII-44`, `RII-45`)** ✅ —
+the "Näkyy" picker comes in `RII-46`. Until `RII-46`, new items can only be
 created private (the UI doesn't send `partyId` yet).
 
 ### Rules
@@ -763,30 +763,74 @@ created private (the UI doesn't send `partyId` yet).
   admin first (or delete the party). The last member leaving deletes the party
   (rule 6 applies).
 
-### API sketch (to be finalized in `RII-10`'s sub-issues)
+### Party API (`RII-44`, `server/src/routes/parties.ts`)
 
-- `GET /parties` — my parties (id, name, my role, member count).
-- `POST /parties` `{ name }` → creates, caller is admin.
-- `GET /parties/:id` — details + members (members only); includes `inviteCode` for admins.
-- `PATCH /parties/:id` `{ name }`, `DELETE /parties/:id` — admin only.
-- `POST /parties/:id/invite-code` (regenerate), `DELETE /parties/:id/invite-code` (disable) — admin only.
-- `GET /invites/:code` — party name for the join screen (logged in; `404` for an unknown/disabled code).
-- `POST /invites/:code/join` — join as member (idempotent if already a member).
-- `DELETE /parties/:id/members/:userId` — admin removes someone, or a member removes themselves (= leave).
-- `PATCH /parties/:id/members/:userId` `{ role }` — admin only.
-- `GET /sightings`, `GET /tracks` — filtered by rule 3 (and `401` when logged out).
-- `POST`/`PATCH /sightings`, `POST /tracks` — accept `partyId` (must be one of the
-  caller's parties, or `null`); `PATCH`/`DELETE` creator only (`403` otherwise).
-- Visibility is enforced **in the server queries**, never only in the UI.
+All routes require login (`401 not_logged_in`). A party you're not a member of
+answers **`404`** everywhere — its existence isn't revealed. Messages are English and
+developer-facing (§7); errors are told apart by `error` code.
 
-### UI sketch (Finnish, details in the sub-issues)
+- `GET /parties` → `{ parties: [{ id, name, myRole, memberCount }] }` — my parties,
+  by name.
+- `POST /parties` `{ name }` → `201 { party }` (detail shape below). The caller
+  becomes `admin`, and an invite code is generated right away so the link can be
+  shared immediately. Name: trimmed, 1–100 chars, else `400 invalid_input`.
+- `GET /parties/:id` → `{ party: { id, name, myRole, inviteCode, members: [{ userId,
+  displayName, role, joinedAt }] } }`. `inviteCode` is `null` for non-admins (and when
+  joining is disabled). Members sorted admins first, then by name.
+- `PATCH /parties/:id` `{ name }` → `{ party }` — admin only (`403 forbidden`).
+- `DELETE /parties/:id` → `204` — admin only. Items in it become private (rule 6).
+- `POST /parties/:id/invite-code` → `{ inviteCode }` — admin only; a fresh code
+  replaces the old one (old links stop working). Codes: 16 random bytes
+  (`crypto.randomBytes`), base64url — 22 characters, ~128 bits, not guessable.
+- `DELETE /parties/:id/invite-code` → `204` — admin only; joining disabled.
+- `GET /invites/:code` → `{ invite: { partyId, partyName, memberCount,
+  alreadyMember } }` for the join screen; `404` for an unknown or disabled code.
+- `POST /invites/:code/join` → `{ party }` (summary shape) — joins as `member`;
+  idempotent (already a member → same response, role unchanged). `404` as above.
+- `DELETE /parties/:id/members/:userId` → `204` — an admin removes anyone, or anyone
+  removes **themselves** (= leave); otherwise `403`. **The last admin can't leave or be
+  removed while other members remain** (`409 last_admin` — make someone else admin
+  first). The last member leaving deletes the party (rule 6).
+- `PATCH /parties/:id/members/:userId` `{ role: 'admin' | 'member' }` → `{ party }` —
+  admin only. Demoting the last admin → `409 last_admin`. Any admin can promote or
+  demote any member, including other admins.
+- Membership changes run in a transaction, so two simultaneous "leave" requests can't
+  both pass the last-admin check.
 
-- Top bar: a **"Porukat"** (parties) menu — list of my parties, create a party, and
-  per party: members, invite link (copy/share, regenerate), rename, leave/delete.
-- Add-sighting form and import panel: a **"Näkyy"** (visible to) picker — my parties +
-  "Vain minä".
-- Sighting and track popups show which party the item belongs to.
-- Join screen at an invite link (`?liity=<code>` on the app URL; no router needed).
+### UI
+
+- **Parties menu (`RII-45`, `src/parties/`)**: a **"Porukat"** button in the top bar
+  (logged in only) opens a panel under the bar, like the login dropdown:
+  - List of my parties (name, my role, member count), a **"Uusi porukka"** form, and a
+    **"Liity porukkaan"** field (added on Miko's request 2026-09-30 — clearer than only
+    opening a link): paste either the invite **code** or the whole **link**; the code
+    is extracted (`parseInviteInput` in `src/parties/inviteLink.ts`) and joined
+    directly (`POST /invites/:code/join`), then the new party opens.
+  - Opening a party shows its members and, by role:
+    - **Admin:** rename; invite link with **Kopioi** (clipboard) and, where the
+      browser supports it (phones), **Jaa** (the OS share sheet); the bare **code**
+      shown too, with **Kopioi koodi**, for pasting into "Liity porukkaan"; **Uusi linkki**
+      (regenerate, with `confirm()` since old links stop working) and **Poista linkki
+      käytöstä** (disable); per member: make admin/member, remove; **Poista porukka**
+      (with `confirm()`).
+    - **Everyone:** **Poistu porukasta** (leave, with `confirm()`). The last admin
+      sees the server's reason instead of leaving.
+- **Join screen (`RII-45`)**: opening the app with **`?liity=<code>`** shows a dialog
+  over the map with the party's name and member count and a **"Liity"** button.
+  Logged out, it says to log in or create an account first (via the top bar) and
+  then continues automatically. Joining (or closing the dialog) removes `?liity=`
+  from the address bar (`history.replaceState`), so a reload doesn't reopen it.
+  Unknown/disabled link → a Finnish error in the same dialog ("Kutsulinkki on
+  vanhentunut tai virheellinen…"), also used by the "Liity porukkaan" field — not the
+  generic "Porukkaa ei löytynyt".
+- After joining, leaving, or deleting a party, the map's sightings and tracks reload
+  (what you may see just changed).
+- **"Näkyy" picker (`RII-46`)**: add-sighting form and import panel — my parties +
+  "Vain minä". Sighting and track popups show which party the item belongs to.
+- All strings in `src/i18n/fi.ts`; panel and dialog fit a phone-width screen. The top
+  bar wraps onto a second line on narrow screens instead of overflowing, and sits above
+  Leaflet's own controls (`z-index` 1100) so its dropdowns aren't covered by the zoom or
+  layers control.
 
 ### Migration of existing data
 
