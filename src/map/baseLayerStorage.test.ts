@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BASE_LAYER_STORAGE_KEY, readStoredBaseLayer, storeBaseLayer } from './baseLayerStorage'
+import { BASE_LAYER_STORAGE_KEY, initialBaseLayer, readStoredBaseLayer, storeBaseLayer } from './baseLayerStorage'
 
 afterEach(() => {
   localStorage.clear()
@@ -30,5 +30,11 @@ describe('base layer storage', () => {
     })
     expect(() => storeBaseLayer('osm')).not.toThrow()
     expect(readStoredBaseLayer()).toBe('maastokartta')
+  })
+
+  it('starts logged-out visitors on OpenStreetMap, keeping the stored choice', () => {
+    storeBaseLayer('ortokuva')
+    expect(initialBaseLayer(false)).toBe('osm')
+    expect(initialBaseLayer(true)).toBe('ortokuva')
   })
 })
