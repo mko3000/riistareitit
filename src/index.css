@@ -510,3 +510,16 @@ body,
   overflow-wrap: anywhere;
   user-select: all; /* one tap selects the whole code */
 }
+
+/* RII-46: the "Näkyy" picker — same stacked label as the sighting form. */
+.visibility-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.85rem;
+}
+
+.visibility-picker select {
+  min-height: 2rem;
+  max-width: 100%;
+}

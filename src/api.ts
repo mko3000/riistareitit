@@ -217,6 +217,7 @@ export function createSighting(input: {
   personDisplay: string
   observedDate: string
   observedTime?: string
+  partyId?: string | null // RII-46: null/omitted = private
 }): Promise<CreateSightingResult> {
   return sendSightingRequest('POST', '/sightings', input)
 }
@@ -233,6 +234,7 @@ export function updateSighting(
     personDisplay: string
     observedDate: string
     observedTime?: string
+    partyId?: string | null // RII-46: null = private
   },
 ): Promise<CreateSightingResult> {
   return sendSightingRequest('PATCH', `/sightings/${id}`, input)
@@ -268,6 +270,7 @@ export interface PublicTrack {
   recordedDate: string | null // "YYYY-MM-DD"
   importedAt: string
   owner: { id: string; displayName: string } | null
+  partyId: string | null // RII-46: null = private to the owner
   segments: Array<Array<[number, number]>> // [lat, lng] pairs
 }
 
@@ -285,7 +288,9 @@ export async function getTracks(): Promise<PublicTrack[]> {
 
 export type CreateTrackResult = { ok: true; track: PublicTrack } | { ok: false; message: string }
 
-export async function createTrack(track: ImportedTrack & { name: string }): Promise<CreateTrackResult> {
+export async function createTrack(
+  track: ImportedTrack & { name: string; partyId: string | null },
+): Promise<CreateTrackResult> {
   let response: Response
   try {
     response = await fetch(`${API_BASE_URL}/tracks`, {
@@ -312,6 +317,31 @@ export async function createTrack(track: ImportedTrack & { name: string }): Prom
       default:
         return { ok: false, message: t.tracks.errors.saveFailed }
     }
+  }
+  return { ok: true, track: body.track }
+}
+
+// RII-46: the owner moves a track to another of their parties, or makes it private.
+export async function setTrackParty(id: string, partyId: string | null): Promise<CreateTrackResult> {
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}/tracks/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ partyId }),
+    })
+  } catch {
+    return { ok: false, message: t.common.serverUnreachable }
+  }
+  const body = await response.json().catch(() => null)
+  if (!response.ok) {
+    const messages: Record<string, string> = {
+      not_logged_in: t.tracks.errors.notLoggedIn,
+      forbidden: t.tracks.errors.forbidden,
+      not_found: t.tracks.errors.notFound,
+    }
+    return { ok: false, message: messages[body?.error] ?? t.tracks.errors.saveFailed }
   }
   return { ok: true, track: body.track }
 }

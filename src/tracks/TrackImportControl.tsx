@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Polyline, useMap } from 'react-leaflet'
 import L, { type LatLngTuple } from 'leaflet'
-import { createTrack, type PublicTrack, type PublicUser } from '../api'
+import { createTrack, type PartySummary, type PublicTrack, type PublicUser } from '../api'
 import { formatFinnishDate, formatKm } from './format'
 import { parseTrackFile } from './parseTrackFile'
 import { TrackParseError } from './parsers/common'
@@ -10,6 +10,8 @@ import { joinShortGaps } from './gapJoining'
 import { pathDistanceM, toLatLngPairs, trackPointCount } from './trackStats'
 import type { ImportedTrack } from './types'
 import { t } from '../i18n'
+import { VisibilityPicker } from '../parties/VisibilityPicker'
+import { readDefaultVisibility, storeDefaultVisibility, type Visibility } from '../parties/visibility'
 
 type ParsedEntry = {
   id: number
@@ -22,6 +24,8 @@ type ParsedEntry = {
   pointCount: number
   saving: boolean
   saveError: string | null
+  // RII-46: a per-row "Näkyy" override; undefined = follow the batch choice.
+  visibility?: Visibility
 }
 
 type ImportEntry = ParsedEntry | { id: number; fileName: string; status: 'error'; message: string }
@@ -68,6 +72,8 @@ interface TrackImportControlProps {
   // RII-40: where the "Tuo reittejä" button renders — the top bar's controls
   // slot. Null until the top bar has mounted.
   barControls: HTMLElement | null
+  // RII-46: for the "Näkyy" pickers.
+  myParties: PartySummary[]
 }
 
 // RII-16: pick track files (several at once), parse them in the browser and
@@ -76,7 +82,7 @@ interface TrackImportControlProps {
 // the panel stops its own clicks from reaching the map so they don't open
 // the add-sighting popup. The button is portaled into the top bar (RII-40);
 // the panel and previews stay on the map.
-export function TrackImportControl({ user, onSaved, barControls }: TrackImportControlProps) {
+export function TrackImportControl({ user, onSaved, barControls, myParties }: TrackImportControlProps) {
   const map = useMap()
   const [entries, setEntries] = useState<ImportEntry[]>([])
   const [reading, setReading] = useState(false)
@@ -115,9 +121,24 @@ export function TrackImportControl({ user, onSaved, barControls }: TrackImportCo
     )
   }
 
+  // RII-46: one "Näkyy" choice for the whole batch, rows can override it.
+  // undefined until the user picks — worked out from the remembered default
+  // at use time, since this panel mounts before my party list has loaded.
+  const [chosenBatchVisibility, setChosenBatchVisibility] = useState<Visibility | undefined>(undefined)
+  const batchVisibility =
+    chosenBatchVisibility !== undefined
+      ? chosenBatchVisibility
+      : readDefaultVisibility(myParties.map((party) => party.id))
+
+  function handleBatchVisibility(value: Visibility) {
+    setChosenBatchVisibility(value)
+    storeDefaultVisibility(value)
+  }
+
   async function saveEntry(entry: ParsedEntry) {
     updateParsed(entry.id, { saving: true, saveError: null })
-    const result = await createTrack({ ...entry.track, name: entry.name })
+    const partyId = entry.visibility !== undefined ? entry.visibility : batchVisibility
+    const result = await createTrack({ ...entry.track, name: entry.name, partyId })
     if (!result.ok) {
       updateParsed(entry.id, { saving: false, saveError: result.message })
       return
@@ -162,6 +183,14 @@ export function TrackImportControl({ user, onSaved, barControls }: TrackImportCo
         {entries.length > 0 && (
           <div className="track-import-panel">
             {!user && <p className="track-import-note">{t.tracks.loginToSave}</p>}
+            {user && (
+              <VisibilityPicker
+                parties={myParties}
+                value={batchVisibility}
+                onChange={handleBatchVisibility}
+                label={t.visibility.batchLabel}
+              />
+            )}
             <ul className="track-import-list">
               {entries.map((entry) => (
                 <li key={entry.id} className={entry.status === 'error' ? 'track-import-error' : undefined}>
@@ -175,6 +204,14 @@ export function TrackImportControl({ user, onSaved, barControls }: TrackImportCo
                     )}
                     {entry.status === 'error' && <span>{entry.message}</span>}
                     {entry.status === 'ok' && entry.saveError && <span className="form-error">{entry.saveError}</span>}
+                    {entry.status === 'ok' && user && (
+                      <VisibilityPicker
+                        parties={myParties}
+                        value={entry.visibility !== undefined ? entry.visibility : batchVisibility}
+                        onChange={(value) => updateParsed(entry.id, { visibility: value })}
+                        disabled={entry.saving}
+                      />
+                    )}
                     {entry.status === 'ok' && user && (
                       <button
                         type="button"

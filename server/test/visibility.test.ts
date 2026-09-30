@@ -228,6 +228,29 @@ describe('tracks follow the same rules', () => {
     expect(response.json().error).toBe('invalid_input')
   })
 
+  it('the owner can move a track to another of their parties, or make it private (RII-46)', async () => {
+    const id = await addTrack(dave, p1, 'dave-p1')
+
+    const moved = await call(dave, 'PATCH', `/tracks/${id}`, { partyId: p2 })
+    expect(moved.json().track.partyId).toBe(p2)
+    expect(await visibleTracks(bob)).not.toContain('dave-p1')
+    expect(await visibleTracks(carol)).toContain('dave-p1')
+
+    const privatized = await call(dave, 'PATCH', `/tracks/${id}`, { partyId: null })
+    expect(privatized.json().track.partyId).toBeNull()
+    expect(await visibleTracks(carol)).not.toContain('dave-p1')
+  })
+
+  it('changing a track\'s party: party member 403, outsider 404, bad party 400, missing partyId 400', async () => {
+    const tracks = (await call(alice, 'GET', '/tracks')).json().tracks as Array<{ id: string; name: string }>
+    const id = tracks.find((t) => t.name === 'alice-p1')!.id
+
+    expect((await call(bob, 'PATCH', `/tracks/${id}`, { partyId: null })).statusCode).toBe(403)
+    expect((await call(carol, 'PATCH', `/tracks/${id}`, { partyId: null })).statusCode).toBe(404)
+    expect((await call(alice, 'PATCH', `/tracks/${id}`, { partyId: p2 })).statusCode).toBe(400)
+    expect((await call(alice, 'PATCH', `/tracks/${id}`, {})).statusCode).toBe(400)
+  })
+
   it("delete: party member 403, outsider 404, owner 204", async () => {
     const tracks = (await call(alice, 'GET', '/tracks')).json().tracks as Array<{ id: string; name: string }>
     const id = tracks.find((t) => t.name === 'alice-p1')!.id

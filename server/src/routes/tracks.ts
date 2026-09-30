@@ -128,6 +128,16 @@ function toPublicTrack(track: TrackWithOwner) {
   }
 }
 
+async function findVisibleTrack(id: string, userId: string) {
+  return prisma.track
+    .findFirst({ where: { AND: [{ id }, tracksVisibleTo(userId)] }, select: { ownerUserId: true } })
+    .catch((err) => {
+      // A malformed id can't match any UUID row.
+      if (err instanceof Prisma.PrismaClientKnownRequestError) return null
+      throw err
+    })
+}
+
 export default async function tracksRoutes(app: FastifyInstance) {
   // RII-43: you see what you own plus everything in your parties
   // (docs/SPEC.md §9 rule 3).
@@ -161,6 +171,36 @@ export default async function tracksRoutes(app: FastifyInstance) {
     return reply.status(201).send({ track: toPublicTrack(track) })
   })
 
+  // RII-46: the owner moves a track to another of their parties, or makes it
+  // private. Only partyId can change — never the points. Same 404/403 rules
+  // as delete.
+  app.patch('/tracks/:id', async (request, reply) => {
+    const user = await requireUser(request, reply)
+    if (!user) return reply
+
+    const { id } = request.params as { id: string }
+    const track = await findVisibleTrack(id, user.id)
+    if (!track) return reply.status(404).send({ error: 'not_found', message: 'Track not found.' })
+    if (track.ownerUserId !== user.id) {
+      return reply.status(403).send({ error: 'forbidden', message: 'Only the track owner can change it.' })
+    }
+
+    const body = (request.body ?? {}) as { partyId?: unknown }
+    // Omitting partyId would be a no-op; require it explicitly.
+    if (body.partyId === undefined) {
+      return reply.status(400).send({ error: 'invalid_input', message: 'partyId is required (null = private).' })
+    }
+    const party = await resolvePartyId(body.partyId, user.id)
+    if (!party.ok) return reply.status(400).send({ error: 'invalid_input', message: 'Not one of your parties.' })
+
+    const updated = await prisma.track.update({
+      where: { id },
+      data: { partyId: party.partyId ?? null },
+      include: { owner: { select: { id: true, displayName: true } } },
+    })
+    return reply.send({ track: toPublicTrack(updated) })
+  })
+
   // Owner only (docs/SPEC.md §9 rule 4). A track the user can't see answers
   // 404 like a missing one (RII-43), so its existence isn't revealed.
   app.delete('/tracks/:id', async (request, reply) => {
@@ -168,13 +208,7 @@ export default async function tracksRoutes(app: FastifyInstance) {
     if (!user) return reply
 
     const { id } = request.params as { id: string }
-    const track = await prisma.track
-      .findFirst({ where: { AND: [{ id }, tracksVisibleTo(user.id)] }, select: { ownerUserId: true } })
-      .catch((err) => {
-        // A malformed id can't match any UUID row.
-        if (err instanceof Prisma.PrismaClientKnownRequestError) return null
-        throw err
-      })
+    const track = await findVisibleTrack(id, user.id)
     if (!track) return reply.status(404).send({ error: 'not_found', message: 'Track not found.' })
     if (track.ownerUserId !== user.id) {
       return reply.status(403).send({ error: 'forbidden', message: 'Only the track owner can delete it.' })

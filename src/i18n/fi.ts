@@ -85,6 +85,15 @@ export const fi = {
     },
   },
 
+  visibility: {
+    // RII-46: the "Näkyy" picker and labels.
+    label: 'Näkyy',
+    private: 'Vain minä',
+    leftParty: 'Porukka, josta olet poistunut',
+    shownIn: (name: string) => `Näkyy: ${name}`,
+    batchLabel: 'Näkyy (kaikki valitut)',
+  },
+
   parties: {
     // RII-45: party management and joining.
     menuButton: 'Porukat',
@@ -170,7 +179,7 @@ export const fi = {
       invalidTrack: 'Reitin tiedot ovat virheelliset.',
       notLoggedIn: 'Kirjaudu sisään nähdäksesi ja lisätäksesi reittejä.',
       notFound: 'Reittiä ei enää ole.',
-      forbidden: 'Voit poistaa vain omia reittejäsi.',
+      forbidden: 'Vain reitin tuoja voi muokata tai poistaa sen.',
       saveFailed: 'Tallennus epäonnistui. Yritä uudelleen.',
       deleteFailed: 'Poisto epäonnistui. Yritä uudelleen.',
     },

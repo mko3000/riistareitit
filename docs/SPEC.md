@@ -308,7 +308,7 @@ Notes:
     a member of — filtered in the database query, never in the UI.
   - `POST`/`PATCH` accept `partyId`: one of the caller's party ids, or `null` for
     private. Omitted on `POST` → private; omitted on `PATCH` → unchanged (the edit
-    form doesn't send it until the party picker, `RII-46`). A party the caller isn't
+    form always sends it since the party picker, `RII-46`). A party the caller isn't
     in → `400 invalid_input` with `fieldErrors.partyId`.
   - `PATCH`/`DELETE /sightings/:id`: a sighting the caller can't see is `404` (same as
     nonexistent — its existence isn't revealed); one they can see but didn't create
@@ -525,6 +525,10 @@ All three routes **require login** (`401` otherwise). **Visibility since `RII-43
   (§4). Route-level `bodyLimit` of 25 MB (Fastify
   defaults to 1 MB; the largest real Google Fit export tested was ~30k points ≈ 3 MB
   of JSON). `201 { track }` in the same shape as a `GET` item.
+- `PATCH /tracks/:id` `{ partyId }` (`RII-46`) — **owner only**; changes only which
+  party sees the track (`partyId`: one of the owner's parties, or `null` = private;
+  anything else → `400 invalid_input`). Same `404`/`403` rules as delete. Returns
+  `{ track }` in the `GET` shape. The points themselves can't be edited.
 - `DELETE /tracks/:id` — **owner only**: `403` for a track the caller can see (via a
   party) but doesn't own; `404` if it doesn't exist **or the caller can't see it**
   (since `RII-43`, existence isn't revealed). Sightings follow the same rule since
@@ -702,9 +706,9 @@ one; don't let it stay a stub once work begins.
 
 **Status:** design decided with Miko 2026-09-30 (`RII-33`, signed off by merging PR
 #66). Being built in `RII-10`'s sub-issues: tables (`RII-42`) ✅; **rules 1–4 enforced
-in the API (`RII-43`)** ✅; **party management API and UI (`RII-44`, `RII-45`)** ✅ —
-the "Näkyy" picker comes in `RII-46`. Until `RII-46`, new items can only be
-created private (the UI doesn't send `partyId` yet).
+in the API (`RII-43`)** ✅; **party management API and UI (`RII-44`, `RII-45`)** ✅;
+**"Näkyy" picker (`RII-46`)** ✅ — only the one-off legacy-sightings script (`RII-47`)
+remains.
 
 ### Rules
 
@@ -825,8 +829,25 @@ developer-facing (§7); errors are told apart by `error` code.
   generic "Porukkaa ei löytynyt".
 - After joining, leaving, or deleting a party, the map's sightings and tracks reload
   (what you may see just changed).
-- **"Näkyy" picker (`RII-46`)**: add-sighting form and import panel — my parties +
-  "Vain minä". Sighting and track popups show which party the item belongs to.
+- **"Näkyy" picker (`RII-46`, `src/parties/VisibilityPicker.tsx`)**: a select labelled
+  "Näkyy" with **"Vain minä"** (private) plus my parties by name.
+  - **Default** for new items: the last choice made in any picker, remembered per
+    browser in `localStorage` (`riistareitit.visibility`: a party id or `private`).
+    A remembered party I'm no longer in (left, removed, deleted) falls back to "Vain
+    minä" — never silently to some other party.
+  - **Add-sighting form:** the picker, sent as `partyId`.
+  - **Edit mode of a sighting:** the picker, preselected with its current party; sent
+    as `partyId`. If it's in a party I've since left, that party is kept as the
+    selected option ("Porukka, josta olet poistunut") so saving other edits doesn't
+    move it by accident.
+  - **Import panel:** one picker at the top for the whole batch (default as above),
+    plus a per-row picker that starts from the batch choice and can override it.
+  - **Popups** (sighting view, saved track) show "Näkyy: <porukan nimi>" or "Näkyy:
+    vain minä". Party names come from my own party list (`GET /parties`, reloaded on
+    login and on membership changes); an item in a party I've left shows "porukka,
+    josta olet poistunut".
+  - **Saved track popup:** its owner gets the picker too, to move the track to another
+    of their parties or make it private (`PATCH /tracks/:id`).
 - All strings in `src/i18n/fi.ts`; panel and dialog fit a phone-width screen. The top
   bar wraps onto a second line on narrow screens instead of overflowing, and sits above
   Leaflet's own controls (`z-index` 1100) so its dropdowns aren't covered by the zoom or
