@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { LayersControl, TileLayer, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { mmlTileUrlTemplate } from '../api'
@@ -29,9 +29,11 @@ interface BaseLayersProps {
   // App remounts this (via `key`) when it changes, so the initial pick below
   // is made again.
   loggedIn: boolean
+  // Overlay entries (<LayersControl.Overlay>) for the same control — RII-49.
+  children?: ReactNode
 }
 
-export function BaseLayers({ loggedIn }: BaseLayersProps) {
+export function BaseLayers({ loggedIn, children }: BaseLayersProps) {
   // Only the initial pick matters to React; after that Leaflet's control
   // owns which layer is shown.
   const [initialLayer] = useState(() => initialBaseLayer(loggedIn))
@@ -72,6 +74,7 @@ export function BaseLayers({ loggedIn }: BaseLayersProps) {
       <LayersControl.BaseLayer name={LAYER_NAMES.osm} checked={initialLayer === 'osm'}>
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution={OSM_ATTRIBUTION} maxZoom={MAX_ZOOM} />
       </LayersControl.BaseLayer>
+      {children}
     </LayersControl>
   )
 }

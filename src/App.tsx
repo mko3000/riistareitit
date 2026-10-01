@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { MapContainer } from 'react-leaflet'
-import { getMe, type PublicUser } from './api'
+import { getMe, type PublicSighting, type PublicTrack, type PublicUser } from './api'
 import { AuthBar } from './auth/AuthBar'
+import { FogOfWarOverlay } from './fog/FogOfWarLayer'
 import { BaseLayers } from './map/BaseLayers'
 import { JoinPartyDialog } from './parties/JoinPartyDialog'
 import { PartiesMenu } from './parties/PartiesMenu'
@@ -28,6 +29,9 @@ function App() {
   const bumpMembership = () => setMembershipVersion((version) => version + 1)
   // RII-46: for the "Näkyy" pickers and popup labels.
   const myParties = useMyParties(user?.id, membershipVersion)
+  // RII-49: what the tracks and sightings layers loaded, for the fog of war.
+  const [tracks, setTracks] = useState<PublicTrack[]>([])
+  const [sightings, setSightings] = useState<PublicSighting[]>([])
 
   // RII-30's acceptance criterion: session (and now the UI reflecting it)
   // persists across a reload.
@@ -44,9 +48,24 @@ function App() {
         <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="map">
           {/* RII-41: which base layers are offered depends on login, so wait
               for the session check rather than loading OSM tiles first. */}
-          {!checkingSession && <BaseLayers key={user ? 'in' : 'out'} loggedIn={user !== null} />}
-          <TracksLayer user={user} barControls={barControls} reloadKey={membershipVersion} myParties={myParties} />
-          <SightingsLayer user={user} reloadKey={membershipVersion} myParties={myParties} />
+          {!checkingSession && (
+            <BaseLayers key={user ? 'in' : 'out'} loggedIn={user !== null}>
+              {user && <FogOfWarOverlay tracks={tracks} sightings={sightings} />}
+            </BaseLayers>
+          )}
+          <TracksLayer
+            user={user}
+            barControls={barControls}
+            reloadKey={membershipVersion}
+            myParties={myParties}
+            onTracksChange={setTracks}
+          />
+          <SightingsLayer
+            user={user}
+            reloadKey={membershipVersion}
+            myParties={myParties}
+            onSightingsChange={setSightings}
+          />
         </MapContainer>
         {/* RII-43: logged out, no sightings or tracks are visible or addable. */}
         {!checkingSession && !user && <div className="login-notice">{t.map.loginToSeeData}</div>}

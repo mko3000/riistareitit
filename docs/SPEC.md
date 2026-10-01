@@ -266,10 +266,9 @@ Notes:
 - **Visibility (since `RII-43`, design §9):** a logged-in user sees a sighting iff they
   created it or they're a member of its party (`party_id`). Logged-out visitors see
   none. Before `RII-43` every sighting was public — a deliberate MVP testing shortcut.
-- Fog of war (RII-13, Post-MVP) is computed from track coverage (`tracks.segments`,
-  likely via PostGIS — see "Track geometry storage") + `sightings` density at
-  render/query time, not stored as its own table — revisit if that proves too slow
-  at scale.
+- Fog of war (RII-13) is computed from track coverage + `sightings` at render time,
+  **in the browser** (`RII-49`, §6 "Fog of war"), not stored as its own table and not
+  via PostGIS yet — revisit if that proves too slow at scale.
 
 ### Sightings API
 
@@ -672,6 +671,99 @@ All three routes **require login** (`401` otherwise). **Visibility since `RII-43
   is the MVP's core value proposition (see §1), not a Post-MVP nicety. Post-MVP's "fog
   of war" is the fuller version of this; the MVP baseline is "you can see the tracks".
 
+### Fog of war (`RII-13` epic; `RII-49` overlay, `RII-50` party drives)
+
+**Variant 2** of `RII-13` ships first (decided with Miko 2026-09-30): a translucent
+overlay over the areas that **have** been explored, coloured by **birds per visit**.
+Variant 1 (grey over *unexplored* areas) isn't built.
+
+- **Where it's computed:** in the browser (`src/fog/`), from exactly the tracks and
+  sightings the map already loaded. So it follows the visibility rules (§9) with no
+  extra server work, and there's no new endpoint or PostGIS. It's recomputed whenever
+  either list changes (load, import, add/edit/delete, party changes).
+- **Grid:** square cells in **Web Mercator** (the map's own projection), so each cell
+  is an axis-aligned square on screen and in the map's tiles.
+  - Cell side `FOG_CELL_SIZE_MERC` ≈ 114.06 Mercator metres, which is **50 m on the
+    ground at 64°N**, the middle of Finland. Mercator stretches with latitude, so on
+    the ground a cell is about 57 m at 60°N and 43 m at 68°N (and larger further
+    south). All distances below are real ground metres, whatever the cell size.
+  - Cell `(ix, iy)` = `floor(x / size), floor(y / size)` of the Mercator coordinates.
+    A cell's position is its centre.
+- **Constants** (`src/fog/fogGrid.ts`, first guesses, tune freely; rendering only,
+  nothing stored):
+  - `VIEW_RANGE_M = 150`: how far a hunter sees in the forest.
+  - `ATTRIBUTION_RANGE_M = 250`: how far from a route a sighting may be and still
+    count for it. It's wider than the view range because markings aren't exact.
+- **Coverage (one track):** the track's lines as drawn (after gap joining, see "Gap
+  joining" above; long unjoined gaps cover nothing). Before rasterising, points closer
+  than 20 m to the previous kept point are dropped (≤ 20 m error, well under the view
+  range). A cell is **covered** by the track if its centre is within `VIEW_RANGE_M` of
+  any line segment.
+- **Visits:** a cell's `visits` = the number of tracks that cover it. Every track is
+  one visit, including two tracks of the same day. `RII-50` will make a party drive
+  (several members' simultaneous tracks) count as one visit.
+- **Which sightings count for a track:** a sighting or kill counts for a track iff
+  - its `observed_date` equals the track's `recorded_date` (**same day**; a track with
+    no date gets no sightings, but still counts as a visit), **and**
+  - it's within `ATTRIBUTION_RANGE_M` of the track's drawn line.
+  Kills count exactly like sightings. A sighting near no same-day track colours
+  nothing.
+- **Crediting:** a sighting that counts for track T is moved to its **nearest point
+  on T's line** (where the hunter probably was when they saw it). Every cell covered
+  by T whose centre is within `VIEW_RANGE_M` of that point gets `birds += weight`.
+  - `weight` is `sightingWeight(sighting)`, **1 per marking** for now (Miko
+    2026-09-30). `RII-51` adds a bird count to sightings; the weight will then be
+    that count.
+  - A sighting near two same-day tracks is credited once per track. Each track is a
+    separate visit, so the rate stays right: seen once, walked twice → 1/2.
+- **Value shown:** `rate = birds / visits` per covered cell.
+- **Colour scale** (`FOG_BINS`): one hue, violet, light → dark as the rate grows.
+  Violet stays clear of the orange tracks, the blue/red pins, and MML's blue water.
+  The ramp was checked with the dataviz skill's palette validator (ordinal, light
+  surface): all checks pass.
+
+  | Rate (birds per visit) | Colour | Legend label |
+  |---|---|---|
+  | 0 (explored, nothing seen) | grey `#8a8580` | "Ei havaintoja" |
+  | > 0 and < 0.5 | `#b9a7f5` | "alle 0,5" |
+  | ≥ 0.5 and < 1 | `#8f6ee8` | "0,5–1" |
+  | ≥ 1 and < 2 | `#6a3fd4` | "1–2" |
+  | ≥ 2 | `#4a1fa8` | "yli 2" |
+
+  - **Opacity is fixed** so the map stays readable: 0.25 for the grey "nothing seen"
+    cells and 0.45 for every violet bin. The colour carries the value, not the
+    darkness. The grid never stacks (each cell is drawn once), so overlapping tracks
+    don't make an area darker.
+  - Cells are drawn without borders. Below about 1 px (zoomed far out) each cell is
+    drawn as at least 1×1 px, so small explored areas don't disappear.
+- **Rendering:** a Leaflet `GridLayer` drawing each 256 px tile onto a canvas from the
+  computed cells (`src/fog/FogOfWarLayer.tsx`). The cells are indexed in 64×64-cell
+  blocks so a tile only looks at the blocks under it. It sits in Leaflet's tile pane
+  with `zIndex` 10: above every base map (z-index 1), below the tracks and pins. Grid
+  layers take no taps, so tapping still adds a sighting. Cell edges are floored to
+  whole pixels so neighbouring cells meet exactly (no seams, no double opacity).
+  Built with `createLayerComponent` from **`@react-leaflet/core`** (react-leaflet's own
+  API for custom layers; it was already installed as react-leaflet's dependency and is
+  now listed directly), so it can sit in the layers control like any other layer.
+- **Toggle:** an overlay checkbox **"Tutkitut alueet"** in the layers control, logged
+  in only (logged out there's nothing to show). **On by default.** The on/off choice
+  is remembered per browser in `localStorage` (`riistareitit.fogOfWar`: `on`/`off`).
+- **Legend:** while the overlay is on, a small box in the bottom-left corner titled
+  **"Linnut / käynti"** lists the five colours with the labels above. The swatches are
+  drawn 0.3 more opaque than on the map so they're readable on the legend's white
+  background. It's a Leaflet control added and removed with the layer.
+- **Performance:** each track's coverage (the expensive part) is computed once per
+  track and cached by the track object, so importing a track computes only that
+  track, and adding, editing or deleting a sighting only re-credits cells. Measured
+  on synthetic data (10 km walks, a point every 3 m): about 0.7 s for 300 tracks
+  from scratch (page load), about 0.1 s to re-credit. Move the computation to a Web
+  Worker or the server if loading starts to feel sluggish.
+- **Not yet (`RII-50`):** joining a hunting party's simultaneous tracks into one
+  connected drive: one visit per drive, a sighting counted once per drive, and the
+  gaps between recorded walkers filled on the grid. Coverage is only ever derived from
+  uploaded tracks; nothing is inferred for members who didn't record (Miko
+  2026-09-30).
+
 ## 7. Localization (RII-7, RII-14)
 
 - Finnish is the default and only language for MVP. All UI strings and the seeded
@@ -934,4 +1026,5 @@ developer-facing (§7); errors are told apart by `error` code.
 - Admin role's actual capabilities (`RII-9`).
 - ~~Hunting party invite flow~~ — resolved: invite link/code (`RII-33`, §9).
 - ~~Sighting/track visibility & privacy model~~ — resolved (`RII-33`, §9).
-- Fog of war: which overlay variant ships, or both (`RII-13`).
+- ~~Fog of war: which overlay variant ships~~ — resolved: variant 2 (explored areas
+  coloured by birds per visit), `RII-49`; party drives in `RII-50` (§6 "Fog of war").
